@@ -1,0 +1,148 @@
+SWE-BENCH PRO: GPT-5 vs CLAUDE SONNET 4.5
+======================================================================
+
+WHAT THIS IS
+----------------------------------------------------------------------
+Paired comparison of GPT-5 and Claude Sonnet 4.5 on SWE-Bench Pro,
+an enterprise software engineering benchmark (731 tasks across 11 repos).
+Both models ran under identical conditions: SWE-Agent scaffold v1.1.0,
+250 turn limit, no cost limit, same tools and prompt.
+Only instances where BOTH models submitted a patch are included.
+
+Instances: 146 paired (skipped 9 unpaired, 9 unsubmitted)
+Repos in this data: NodeBB/NodeBB, ansible/ansible, element-hq/element
+Note: data is from a partial download. Full dataset is ~1460 trajectories.
+
+OUTCOME
+----------------------------------------------------------------------
+Both resolved:                    67  (45.9%)
+Only GPT-5 resolved:               0  (0.0%)
+Only Claude Sonnet 4.5:            0  (0.0%)
+Neither resolved:                 79  (54.1%)
+GPT-5 resolve rate:           67/146 = 45.9%
+Claude Sonnet 4.5 resolve rate: 67/146 = 45.9%
+
+REPOS
+----------------------------------------------------------------------
+  NodeBB/NodeBB                        n= 40  GPT-5 resolved:  11  Claude:  11
+  ansible/ansible                      n= 93  GPT-5 resolved:  51  Claude:  51
+  element-hq/element                   n= 13  GPT-5 resolved:   5  Claude:   5
+
+COST
+----------------------------------------------------------------------
+Metric                                     GPT-5  Claude S4.5  C/G ratio
+                                                                        
+Mean                                       $2.10       $11.18       5.3x
+  ^ Average API cost per task.
+Median                                     $1.79       $10.75       6.0x
+  ^ Middle value, less affected by outliers.
+Total                                    $307.27     $1631.89       5.3x
+  ^ Sum across all filtered tasks.
+Cost per resolve                           $4.59       $24.36       5.3x
+  ^ Total spend / tasks fixed.
+
+  GPT-5 more expensive on 5/146 instances.
+  Costs reflect Scale AI's internal litellm pricing, not public list prices.
+
+TOKENS
+----------------------------------------------------------------------
+Metric                                     GPT-5  Claude S4.5  C/G ratio
+                                                                        
+Input tokens (mean)                    3,378,994    2,780,896       0.8x
+  ^ Total tokens sent across all API calls. Grows each step as history accumulates.
+API calls (mean)                              67           81       1.2x
+  ^ Number of model roundtrips.
+Tokens/call (mean)                        43,429       33,011       0.8x
+  ^ Average context size per call.
+Output tokens (mean)                       7,120       19,889       2.8x
+  ^ Response text + tool call args, via tiktoken. GPT-5 hidden reasoning not included.
+  content                                      2        2,571    1345.4x
+  ^ Text portion of the response.
+  tool_call args                           7,118       17,318       2.4x
+  ^ Arguments to tools — edits, commands, queries.
+$/1M input tokens                          $0.62        $4.02       6.5x
+  ^ Effective rate paid per million input tokens.
+
+TOOL EXECUTION TIME
+----------------------------------------------------------------------
+Metric                                     GPT-5  Claude S4.5  C/G ratio
+                                                                        
+Mean total (s)                             151.1        196.8       1.3x
+  ^ Seconds waiting for tools per task. Does not include model thinking time.
+Median total (s)                            50.7         63.3       1.2x
+  ^ Less skewed by tasks with long test suites.
+Mean max step (s)                           79.6         91.7       1.2x
+  ^ Longest single tool call per task, averaged.
+Steps >10s (total)                            91          248       2.7x
+  ^ Tool calls taking over 10 seconds.
+
+STEPS & ACTIONS
+----------------------------------------------------------------------
+Metric                                     GPT-5  Claude S4.5  C/G ratio
+                                                                        
+Mean steps                                    67           81       1.2x
+  ^ Total model turns per task.
+  bash                                      20.4         31.7       1.6x
+  ^ Shell commands — tests, deps, output.
+  view                                      21.1         17.1       0.8x
+  ^ Reading file contents.
+  edit                                      10.1          7.9       0.8x
+  ^ Modifying existing files.
+  create                                     1.5          7.1       4.7x
+  ^ Creating new files.
+  search_find                               12.2         15.1       1.2x
+  ^ find/grep to locate files.
+  submit                                     0.9          0.8       1.0x
+  ^ Final patch submission.
+  other                                      1.1          1.1       1.0x
+  ^ Unclassified.
+
+CONTENT VOLUME (mean chars/instance)
+----------------------------------------------------------------------
+Metric                                     GPT-5  Claude S4.5  C/G ratio
+                                                                        
+Observations (in)                        262,265      176,142       0.7x
+  ^ Tool output consumed — file contents, stdout, test results.
+Actions (out)                             28,503       64,223       2.3x
+  ^ What the model asked tools to do.
+Thoughts (out)                             3,562       13,481       3.8x
+  ^ Visible reasoning. GPT-5 uses hidden chain-of-thought.
+Patch size (chars)                        20,674       29,661       1.4x
+  ^ Final submitted diff.
+Patch size (tokens)                        5,047        7,250       1.4x
+  ^ Tiktoken count of the submitted diff.
+
+METHODOLOGY & CAVEATS
+----------------------------------------------------------------------
+Source: SWE-Bench Pro leaderboard trajectories from Scale AI S3 bucket.
+Both runs dated October 13, 2025. SWE-Agent v1.1.0, same prompt/tools.
+GPT-5: reasoning_effort=high. Claude Sonnet 4.5: default settings.
+
+Token counting:
+- Input tokens: from litellm.utils.token_counter (reliable).
+- Output tokens: counted via tiktoken cl100k_base across message.content
+  + message.thought + tool_calls[].function.arguments.
+- GPT-5 hidden reasoning tokens are billed but invisible — not counted
+  in output tokens. This means GPT-5's true output is higher than shown.
+- The upstream tokens_received field is broken (only counts content,
+  misses tool_call args). We don't use it.
+
+Cost:
+- instance_cost from litellm.cost_calculator.completion_cost (reliable).
+- Reflects Scale AI's internal proxy pricing, NOT public list prices.
+- At public list prices the cost ratio would be different.
+
+Action classification:
+- Classified by action string prefix. grep reclassified from bash to
+  search_find. 'create' correctly separated from 'edit' (earlier bug
+  where str_replace_editor matched str_replace before create was fixed).
+
+What's NOT measured:
+- Wall-clock time per instance (not recorded anywhere).
+- LLM inference latency (not recorded).
+- GPT-5 hidden reasoning token count.
+- Input/output cost breakdown (only blended total).
+
+======================================================================
+Generated from 146 paired instances (partial download).
+Full dataset: ~1460 trajectories across 11 repos, 4 languages.

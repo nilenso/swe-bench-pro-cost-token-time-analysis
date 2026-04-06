@@ -44,16 +44,22 @@ echo "▸ Step 2: Build HTML report"
 python3 scripts/build_report.py "$STATS_FILE" -o "$REPORT_FILE"
 echo ""
 
-# Step 3: Build unsubmitted report
+# Step 3: Build plain text report (for AI agents)
+echo "▸ Step 3: Build plain text report"
+python3 scripts/build_text_report.py "$STATS_FILE" -o report.txt
+echo ""
+
+# Step 4: Build unsubmitted report
 echo "▸ Step 3: Build unsubmitted report"
 PAIRED=$(python3 -c "import json; d=json.load(open('$STATS_FILE')); print(len(d))")
 python3 scripts/build_unsubmitted_report.py "$STATS_FILE" -o "$UNSUB_FILE" --paired-count "$PAIRED"
 echo ""
 
-# Step 4: Copy to docs/ for GitHub Pages
+# Step 5: Copy to docs/ for GitHub Pages
 mkdir -p "$DOCS_DIR"
 cp "$REPORT_FILE" "$DOCS_DIR/index.html"
 cp "$UNSUB_FILE" "$DOCS_DIR/unsubmitted.html"
+cp report.txt "$DOCS_DIR/report.txt"
 echo ""
 
 echo "═══ Done ═══"
