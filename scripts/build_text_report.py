@@ -77,7 +77,11 @@ def report(data):
     w()
     w(f"Instances: {n} paired (skipped {unpaired} unpaired, {unsub} unsubmitted)")
     w(f"Repos in this data: {', '.join(repos)}")
-    w(f"Note: data is from a partial download. Full dataset is ~1460 trajectories.")
+    total_trajs = len(data)
+    if total_trajs >= 1400:
+        w(f"Full dataset: {total_trajs} trajectories.")
+    else:
+        w(f"Note: data is from a partial download ({total_trajs}/{1460} trajectories).")
     w()
 
     w("OUTCOME")
@@ -244,8 +248,8 @@ def report(data):
     w("- Input/output cost breakdown (only blended total).")
     w()
     w("=" * 70)
-    w(f"Generated from {n} paired instances (partial download).")
-    w(f"Full dataset: ~1460 trajectories across 11 repos, 4 languages.")
+    w(f"Generated from {n} paired instances ({len(data)} total trajectories).")
+    w(f"Dataset: 1460 trajectories across 11 repos, 4 languages.")
 
     return "\n".join(lines) + "\n"
 

@@ -11,7 +11,7 @@ Only instances where BOTH models submitted a patch are included.
 
 Instances: 616 paired (skipped 0 unpaired, 114 unsubmitted)
 Repos in this data: NodeBB/NodeBB, ansible/ansible, element-hq/element, flipt-io/flipt, future-architect/vuls, gravitational/teleport, internetarchive/openlibrary, navidrome/navidrome, protonmail/webclients, qutebrowser/qutebrowser, tutao/tutanota
-Note: data is from a partial download. Full dataset is ~1460 trajectories.
+Full dataset: 1460 trajectories.
 
 OUTCOME
 ----------------------------------------------------------------------
@@ -152,5 +152,5 @@ What's NOT measured:
 - Input/output cost breakdown (only blended total).
 
 ======================================================================
-Generated from 616 paired instances (partial download).
-Full dataset: ~1460 trajectories across 11 repos, 4 languages.
+Generated from 616 paired instances (1460 total trajectories).
+Dataset: 1460 trajectories across 11 repos, 4 languages.
