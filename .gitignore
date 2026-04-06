@@ -1,0 +1,16 @@
+# Trajectory data (23GB+ downloaded from S3)
+data/
+sample/
+trajectories/
+
+# Generated stats (reproducible from traj data)
+stats.json
+partial_stats.json
+sample_stats.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Paper PDF
+swe_bench_pro_paper.pdf

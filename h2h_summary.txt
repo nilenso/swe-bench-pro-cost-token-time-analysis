@@ -1,0 +1,102 @@
+Head-to-Head: Both Models Resolved — 23 instances
+===========================================================================
+Only tasks where GPT-5 AND Claude 4.5 Sonnet both produced a
+correct patch. Apples-to-apples comparison of efficiency on
+identical successes.
+
+REPOS
+---------------------------------------------------------------------------
+  NodeBB/NodeBB                             11
+  ansible/ansible                           12
+
+COST
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5  Ratio C/G
+  Mean                           $       1.69 $      10.10        6.0×
+  Median                         $       1.39 $       9.96        7.2×
+  Min                            $       0.35 $       2.12
+  Max                            $       4.45 $      20.72
+  Total                          $      38.78 $     232.37        6.0×
+
+  Claude more expensive on 22/23 instances
+
+TOKENS
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5  Ratio C/G
+  Input tokens (mean)               2,525,928    2,462,830        1.0×
+  API calls (mean)                         56           74        1.3×
+  Tokens/call (mean)                   38,603       32,292        0.8×
+  Output tokens (mean)                  5,535       17,544        3.2×
+    content                                 2        1,881
+    tool_call args                      5,533       15,663
+
+  GPT-5 sends more input on 9/23 instances
+
+STEPS & ACTIONS
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5  Ratio C/G
+  Mean steps                               56           74        1.3×
+    bash                                 25.9         37.2       1.4×
+    view                                 19.0         15.6       0.8×
+    edit                                  9.0         12.9       1.4×
+    create                                0.0          0.0          —
+    search_find                           0.0          6.4          —
+    submit                                1.0          0.8       0.8×
+    other                                 1.3          1.1       0.8×
+
+TOOL EXECUTION TIME
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5  Ratio C/G
+  Mean total (s)                        122.8        156.1        1.3×
+  Median total (s)                       38.5         46.3
+  Mean max step (s)                      64.3         89.6
+
+CONTENT VOLUME (mean chars/instance)
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5  Ratio C/G
+  Observations (in)                   226,976      175,886        0.8×
+  Actions (out)                        21,373       57,256        2.7×
+  Thoughts (out)                        4,342       10,079        2.3×
+  Patch size                           16,735       34,907        2.1×
+
+EFFICIENCY (on these shared successes)
+---------------------------------------------------------------------------
+                                        GPT-5   Claude 4.5
+  Input tokens / patch char               209          252
+  $ / patch char                 $      0.01¢ $      0.03¢
+  Mean steps to solve                      56           74
+
+PER-INSTANCE BREAKDOWN (sorted by GPT-5 cost)
+---------------------------------------------------------------------------
+  Instance                                             $GPT   $CLD  StG  StC   PchG   PchC
+---------------------------------------------------------------------------
+  ansible__ansible-0ea40e09d1b35bcb69ff4d9cecf3d0d…    0.35   5.88   15   62   3161   7330
+  ansible__ansible-1ee70fc272aff6bf3415357c6e13c5d…    0.46   8.17   22   82   4143   3328
+  ansible__ansible-3db08adbb1cc6aa9941be5e0fc81013…    0.57   5.88   35   67   2879   1689
+  ansible__ansible-185d41031660a676c43fbb781cd1335…    0.81   8.83   48   76  11366   1744
+  ansible__ansible-106909db8b730480615f4a33de0eb5b…    0.82  11.67   33   58   2260   5344
+  NodeBB__NodeBB-76c6e30282906ac664f2c9278fc90999b…    0.96  16.43   48   87  13719  65214
+  ansible__ansible-1a4644ff15355fd696ac5b9d074a566…    1.09  12.86   47   93   7891  16538
+  NodeBB__NodeBB-f9ce92df988db7c1ae55d9ef96d247d27…    1.11  10.44   54   66  21910   6563
+  ansible__ansible-189fcb37f973f0b1d52b555728208ee…    1.12  13.30   36   84  12653  12796
+  NodeBB__NodeBB-82562bec444940608052f3e4149e0c61e…    1.18   9.19   42   89  17993  16812
+  NodeBB__NodeBB-397835a05a8e2897324e566b41c5e616e…    1.31   2.23   57   29  24420   4661
+  ansible__ansible-29aea9ff3466e4cd2ed00524b9e5673…    1.39   8.72   48   74  12158   6929
+  NodeBB__NodeBB-51d8f3b195bddb13a13ddc0de11072277…    1.40   5.18   71   47  54799  56886
+  NodeBB__NodeBB-7b8bffd763e2155cf88f3ebc258fa68eb…    1.45  14.12   50   89   6011  11302
+  ansible__ansible-379058e10f3dbc0fdcaf80394bd09b1…    1.70   9.82   69   89  10127  28846
+  NodeBB__NodeBB-0c81642997ea1d827dbd02c311db9d497…    2.05  15.27   42   98  42719  54619
+  ansible__ansible-1b70260d5aa2f6c9782fd2b848e8d16…    2.13   9.77   75   81  10912  28327
+  ansible__ansible-0fd88717c953b92ed8a50495d55e630…    2.20   9.96   65   86  13444  37293
+  NodeBB__NodeBB-22368b996ee0e5f11a5189b400b33af3c…    2.96  10.92   96   71  18194  76407
+  ansible__ansible-12734fa21c08a0ce8c84e533abdc560…    2.98   2.12   69   41   5014  12976
+  NodeBB__NodeBB-eb49a64974ca844bca061744fb3383f5d…    2.99  20.72   91  105  57455 238086
+  NodeBB__NodeBB-0f788b8eaa4bba3c142d171fd941d015c…    3.30  10.49   72   70  12352  27066
+  NodeBB__NodeBB-4327a09d76f10a79109da9d91c2212042…    4.45  10.41  107   58  19320  82109
+
+===========================================================================
+Data: 23 instances where both models resolved (partial download)
+Repos: 2 (NodeBB/NodeBB, ansible/ansible)
+Config: 250 turn limit, no cost limit, SWE-Agent scaffold
+  GPT-5: reasoning_effort=high
+  Claude 4.5 Sonnet: default

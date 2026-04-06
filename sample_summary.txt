@@ -1,0 +1,63 @@
+SWE-Bench Pro Trajectory Analysis — 8 instances × 2 models
+===========================================================================
+
+OUTCOME
+---------------------------------------------------------------------------
+  GPT-5                resolved: 4/8  submitted: 8/8
+  Claude 4.5 Sonnet    resolved: 4/8  submitted: 7/8
+
+COST
+---------------------------------------------------------------------------
+                                GPT-5     Claude 4.5
+  Mean                 $         3.05 $        12.41
+  Median               $         2.99 $        13.29
+  Min                  $         1.10 $         5.37
+  Max                  $         6.29 $        22.96
+  Total (8 inst)       $        24.37 $        99.26
+  Cost per resolve     $         6.09 $        24.81
+
+TOKENS
+---------------------------------------------------------------------------
+                                GPT-5     Claude 4.5
+  Input tokens (mean)       5,304,318      3,015,424
+  API calls (mean)                 92             81
+  Tokens/call (mean)           53,490         35,611
+  Output tokens (mean)          8,540         17,443
+    content                         6          3,100
+    tool_call args              8,535         14,342
+  tokens_received *             1,114          3,545
+  $/1M input tokens    $         0.57 $         4.11
+
+TOOL EXECUTION TIME
+---------------------------------------------------------------------------
+                                GPT-5     Claude 4.5
+  Mean total (s)                201.2           63.8
+  Mean max step (s)             119.3            9.2
+  Steps >10s (total)               12              5
+
+STEPS & ACTIONS
+---------------------------------------------------------------------------
+                                GPT-5     Claude 4.5
+  Mean steps                       92             81
+    bash                         48.1           34.4
+    view                         29.5           17.4
+    edit                         12.1           15.1
+    search_find                   0.1           11.1
+    submit                        0.9            0.8
+
+CONTENT VOLUME (mean chars/instance)
+---------------------------------------------------------------------------
+                                GPT-5     Claude 4.5
+  Observations (in)           308,769        204,364
+  Actions (out)                33,112         53,140
+  Thoughts (out)                5,069         15,468
+  Patch size                   26,642         55,778
+
+===========================================================================
+* tokens_received undercounts: only counts message.content, misses
+  tool_call arguments. See output_tokens for tiktoken-corrected count.
+
+Sample: 8 instances (4 NodeBB/JS, 4 ansible/Python)
+Config: 250 turn limit, no cost limit, SWE-Agent scaffold
+  GPT-5: reasoning_effort=high
+  Claude 4.5 Sonnet: default
