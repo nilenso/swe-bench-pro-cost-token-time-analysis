@@ -15,26 +15,26 @@ Note: data is from a partial download. Full dataset is ~1460 trajectories.
 
 OUTCOME
 ----------------------------------------------------------------------
-Both resolved:                   274  (44.5%)
-Only GPT-5 resolved:               0  (0.0%)
-Only Claude Sonnet 4.5:            0  (0.0%)
-Neither resolved:                342  (55.5%)
-GPT-5 resolve rate:           274/616 = 44.5%
+Both resolved:                   206  (33.4%)
+Only GPT-5 resolved:              56  (9.1%)
+Only Claude Sonnet 4.5:           68  (11.0%)
+Neither resolved:                286  (46.4%)
+GPT-5 resolve rate:           262/616 = 42.5%
 Claude Sonnet 4.5 resolve rate: 274/616 = 44.5%
 
 REPOS
 ----------------------------------------------------------------------
-  NodeBB/NodeBB                        n= 40  GPT-5 resolved:  11  Claude:  11
-  ansible/ansible                      n= 93  GPT-5 resolved:  51  Claude:  51
-  element-hq/element                   n= 47  GPT-5 resolved:  16  Claude:  16
-  flipt-io/flipt                       n= 75  GPT-5 resolved:  24  Claude:  24
-  future-architect/vuls                n= 50  GPT-5 resolved:  22  Claude:  22
-  gravitational/teleport               n= 57  GPT-5 resolved:  15  Claude:  15
+  NodeBB/NodeBB                        n= 40  GPT-5 resolved:  16  Claude:  11
+  ansible/ansible                      n= 93  GPT-5 resolved:  47  Claude:  51
+  element-hq/element                   n= 47  GPT-5 resolved:  19  Claude:  16
+  flipt-io/flipt                       n= 75  GPT-5 resolved:  15  Claude:  24
+  future-architect/vuls                n= 50  GPT-5 resolved:  19  Claude:  22
+  gravitational/teleport               n= 57  GPT-5 resolved:  13  Claude:  15
   internetarchive/openlibrary          n= 74  GPT-5 resolved:  39  Claude:  39
   navidrome/navidrome                  n= 48  GPT-5 resolved:  20  Claude:  20
-  protonmail/webclients                n= 37  GPT-5 resolved:  18  Claude:  18
-  qutebrowser/qutebrowser              n= 79  GPT-5 resolved:  52  Claude:  52
-  tutao/tutanota                       n= 16  GPT-5 resolved:   6  Claude:   6
+  protonmail/webclients                n= 37  GPT-5 resolved:  14  Claude:  18
+  qutebrowser/qutebrowser              n= 79  GPT-5 resolved:  51  Claude:  52
+  tutao/tutanota                       n= 16  GPT-5 resolved:   9  Claude:   6
 
 COST
 ----------------------------------------------------------------------
@@ -46,7 +46,7 @@ Median                                     $1.74       $10.75       6.2x
   ^ Middle value, less affected by outliers.
 Total                                   $1217.90     $6973.20       5.7x
   ^ Sum across all filtered tasks.
-Cost per resolve                           $4.44       $25.45       5.7x
+Cost per resolve                           $4.65       $25.45       5.5x
   ^ Total spend / tasks fixed.
 
   GPT-5 more expensive on 11/616 instances.

@@ -276,7 +276,9 @@ def extract_one(traj_path: str, enc: tiktoken.Encoding) -> dict:
         content=content_vol,
         config=config,
     )
-    return asdict(stats)
+    result = asdict(stats)
+    result['_traj_path'] = traj_path
+    return result
 
 
 # ── Worker process ──────────────────────────────────────────────────────
@@ -315,12 +317,25 @@ def find_trajectories(directory: str) -> list[str]:
     return traj_files
 
 
-def load_eval_results(paths: list[str]) -> dict[str, bool]:
+def load_eval_results(pairs: list[str]) -> dict[str, dict[str, bool]]:
+    """Load eval results keyed by (directory, instance_id).
+
+    Args:
+        pairs: list of 'directory:eval_file.json' strings
+    Returns:
+        dict mapping directory -> {instance_id: resolved}
+    """
     results = {}
-    for p in paths:
-        with open(p, 'rb') as f:
+    for pair in pairs:
+        if ':' in pair:
+            directory, path = pair.split(':', 1)
+        else:
+            # Legacy: bare path, no directory scoping
+            directory = '__all__'
+            path = pair
+        with open(path, 'rb') as f:
             data = orjson.loads(f.read())
-        results.update(data)
+        results[directory] = data
     return results
 
 
@@ -329,7 +344,8 @@ def load_eval_results(paths: list[str]) -> dict[str, bool]:
 def main():
     parser = argparse.ArgumentParser(description="Fast parallel stats extraction from SWE-Bench Pro trajectories")
     parser.add_argument("directories", nargs="+", help="Directories containing instance subdirs with .traj files")
-    parser.add_argument("--eval-results", nargs="*", default=[], help="eval_results.json files for resolved status")
+    parser.add_argument("--eval-results", nargs="*", default=[],
+                        help="dir:eval_results.json pairs (e.g. data/gpt5/traj:eval_gpt5.json)")
     parser.add_argument("-o", "--output", default=None, help="Output JSON file (default: stdout)")
     parser.add_argument("-w", "--workers", type=int, default=None, help="Worker processes (default: cpu_count - 2)")
     args = parser.parse_args()
@@ -353,10 +369,11 @@ def main():
     print(f"  Workers: {workers}", file=sys.stderr)
 
     # ── Load eval results ───────────────────────────────────────────
-    eval_results = {}
+    eval_by_dir = {}
     if args.eval_results:
-        eval_results = load_eval_results(args.eval_results)
-        print(f"  Eval results: {len(eval_results)} entries", file=sys.stderr)
+        eval_by_dir = load_eval_results(args.eval_results)
+        total_entries = sum(len(v) for v in eval_by_dir.values())
+        print(f"  Eval results: {total_entries} entries across {len(eval_by_dir)} files", file=sys.stderr)
 
     # ── Parallel extraction ─────────────────────────────────────────
     t0 = time.time()
@@ -373,9 +390,17 @@ def main():
                 errors += 1
                 print(f"\n  ERROR: {result['_path']}: {result['_error']}", file=sys.stderr)
             else:
-                # Cross-reference eval results
-                if eval_results:
-                    result['resolved'] = eval_results.get(result['instance_id'], None)
+                # Cross-reference eval results — match by traj directory
+                if eval_by_dir:
+                    resolved = None
+                    traj_path = result.get('_traj_path', '')
+                    for directory, evals in eval_by_dir.items():
+                        if directory == '__all__' or directory in traj_path:
+                            resolved = evals.get(result['instance_id'], None)
+                            if resolved is not None:
+                                break
+                    result['resolved'] = resolved
+                result.pop('_traj_path', None)
                 all_stats.append(result)
 
             # Progress bar

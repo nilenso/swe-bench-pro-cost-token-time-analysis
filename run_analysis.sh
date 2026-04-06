@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 TRAJ_DIRS="data/gpt5/traj data/claude45/traj"
-EVAL_FILES="eval_results_gpt5.json eval_results_claude45.json"
+EVAL_FILES="data/gpt5/traj:eval_results_gpt5.json data/claude45/traj:eval_results_claude45.json"
 STATS_FILE="stats.json"
 REPORT_FILE="report.html"
 UNSUB_FILE="unsubmitted.html"
@@ -35,7 +35,7 @@ echo ""
 echo "▸ Step 1: Extract trajectory stats"
 python3 scripts/extract_stats_fast.py $TRAJ_DIRS \
     --eval-results $EVAL_FILES \
-    $WORKERS \
+    ${WORKERS:+$WORKERS} \
     -o "$STATS_FILE"
 echo ""
 
