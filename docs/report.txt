@@ -9,107 +9,115 @@ Both models ran under identical conditions: SWE-Agent scaffold v1.1.0,
 250 turn limit, no cost limit, same tools and prompt.
 Only instances where BOTH models submitted a patch are included.
 
-Instances: 146 paired (skipped 9 unpaired, 9 unsubmitted)
-Repos in this data: NodeBB/NodeBB, ansible/ansible, element-hq/element
+Instances: 616 paired (skipped 0 unpaired, 114 unsubmitted)
+Repos in this data: NodeBB/NodeBB, ansible/ansible, element-hq/element, flipt-io/flipt, future-architect/vuls, gravitational/teleport, internetarchive/openlibrary, navidrome/navidrome, protonmail/webclients, qutebrowser/qutebrowser, tutao/tutanota
 Note: data is from a partial download. Full dataset is ~1460 trajectories.
 
 OUTCOME
 ----------------------------------------------------------------------
-Both resolved:                    67  (45.9%)
+Both resolved:                   274  (44.5%)
 Only GPT-5 resolved:               0  (0.0%)
 Only Claude Sonnet 4.5:            0  (0.0%)
-Neither resolved:                 79  (54.1%)
-GPT-5 resolve rate:           67/146 = 45.9%
-Claude Sonnet 4.5 resolve rate: 67/146 = 45.9%
+Neither resolved:                342  (55.5%)
+GPT-5 resolve rate:           274/616 = 44.5%
+Claude Sonnet 4.5 resolve rate: 274/616 = 44.5%
 
 REPOS
 ----------------------------------------------------------------------
   NodeBB/NodeBB                        n= 40  GPT-5 resolved:  11  Claude:  11
   ansible/ansible                      n= 93  GPT-5 resolved:  51  Claude:  51
-  element-hq/element                   n= 13  GPT-5 resolved:   5  Claude:   5
+  element-hq/element                   n= 47  GPT-5 resolved:  16  Claude:  16
+  flipt-io/flipt                       n= 75  GPT-5 resolved:  24  Claude:  24
+  future-architect/vuls                n= 50  GPT-5 resolved:  22  Claude:  22
+  gravitational/teleport               n= 57  GPT-5 resolved:  15  Claude:  15
+  internetarchive/openlibrary          n= 74  GPT-5 resolved:  39  Claude:  39
+  navidrome/navidrome                  n= 48  GPT-5 resolved:  20  Claude:  20
+  protonmail/webclients                n= 37  GPT-5 resolved:  18  Claude:  18
+  qutebrowser/qutebrowser              n= 79  GPT-5 resolved:  52  Claude:  52
+  tutao/tutanota                       n= 16  GPT-5 resolved:   6  Claude:   6
 
 COST
 ----------------------------------------------------------------------
 Metric                                     GPT-5  Claude S4.5  C/G ratio
                                                                         
-Mean                                       $2.10       $11.18       5.3x
+Mean                                       $1.98       $11.32       5.7x
   ^ Average API cost per task.
-Median                                     $1.79       $10.75       6.0x
+Median                                     $1.74       $10.75       6.2x
   ^ Middle value, less affected by outliers.
-Total                                    $307.27     $1631.89       5.3x
+Total                                   $1217.90     $6973.20       5.7x
   ^ Sum across all filtered tasks.
-Cost per resolve                           $4.59       $24.36       5.3x
+Cost per resolve                           $4.44       $25.45       5.7x
   ^ Total spend / tasks fixed.
 
-  GPT-5 more expensive on 5/146 instances.
+  GPT-5 more expensive on 11/616 instances.
   Costs reflect Scale AI's internal litellm pricing, not public list prices.
 
 TOKENS
 ----------------------------------------------------------------------
 Metric                                     GPT-5  Claude S4.5  C/G ratio
                                                                         
-Input tokens (mean)                    3,378,994    2,780,896       0.8x
+Input tokens (mean)                    3,134,425    2,802,336       0.9x
   ^ Total tokens sent across all API calls. Grows each step as history accumulates.
-API calls (mean)                              67           81       1.2x
+API calls (mean)                              64           78       1.2x
   ^ Number of model roundtrips.
-Tokens/call (mean)                        43,429       33,011       0.8x
+Tokens/call (mean)                        42,224       34,705       0.8x
   ^ Average context size per call.
-Output tokens (mean)                       7,120       19,889       2.8x
+Output tokens (mean)                       7,101       17,705       2.5x
   ^ Response text + tool call args, via tiktoken. GPT-5 hidden reasoning not included.
-  content                                      2        2,571    1345.4x
+  content                                      4        2,282     542.9x
   ^ Text portion of the response.
-  tool_call args                           7,118       17,318       2.4x
+  tool_call args                           7,097       15,422       2.2x
   ^ Arguments to tools — edits, commands, queries.
-$/1M input tokens                          $0.62        $4.02       6.5x
+$/1M input tokens                          $0.63        $4.04       6.4x
   ^ Effective rate paid per million input tokens.
 
 TOOL EXECUTION TIME
 ----------------------------------------------------------------------
 Metric                                     GPT-5  Claude S4.5  C/G ratio
                                                                         
-Mean total (s)                             151.1        196.8       1.3x
+Mean total (s)                             295.8        265.7       0.9x
   ^ Seconds waiting for tools per task. Does not include model thinking time.
-Median total (s)                            50.7         63.3       1.2x
+Median total (s)                            75.9        131.0       1.7x
   ^ Less skewed by tasks with long test suites.
-Mean max step (s)                           79.6         91.7       1.2x
+Mean max step (s)                          132.5        123.5       0.9x
   ^ Longest single tool call per task, averaged.
-Steps >10s (total)                            91          248       2.7x
+Steps >10s (total)                           952         1757       1.8x
   ^ Tool calls taking over 10 seconds.
 
 STEPS & ACTIONS
 ----------------------------------------------------------------------
 Metric                                     GPT-5  Claude S4.5  C/G ratio
                                                                         
-Mean steps                                    67           81       1.2x
+Mean steps                                    65           78       1.2x
   ^ Total model turns per task.
-  bash                                      20.4         31.7       1.6x
+  bash                                      19.1         33.0       1.7x
   ^ Shell commands — tests, deps, output.
-  view                                      21.1         17.1       0.8x
+  view                                      20.6         15.2       0.7x
   ^ Reading file contents.
-  edit                                      10.1          7.9       0.8x
+  edit                                       9.6          8.1       0.9x
   ^ Modifying existing files.
-  create                                     1.5          7.1       4.7x
+  create                                     1.4          6.1       4.5x
   ^ Creating new files.
-  search_find                               12.2         15.1       1.2x
+  search_find                               11.9         13.6       1.1x
   ^ find/grep to locate files.
-  submit                                     0.9          0.8       1.0x
+  submit                                     0.7          0.9       1.2x
   ^ Final patch submission.
-  other                                      1.1          1.1       1.0x
+  other                                      1.3          1.1       0.9x
   ^ Unclassified.
 
 CONTENT VOLUME (mean chars/instance)
 ----------------------------------------------------------------------
 Metric                                     GPT-5  Claude S4.5  C/G ratio
                                                                         
-Observations (in)                        262,265      176,142       0.7x
+Observations (in)                        256,783      220,346       0.9x
   ^ Tool output consumed — file contents, stdout, test results.
-Actions (out)                             28,503       64,223       2.3x
+Actions (out)                             26,578       54,680       2.1x
   ^ What the model asked tools to do.
-Thoughts (out)                             3,562       13,481       3.8x
+Thoughts (out)                             3,230       12,339       3.8x
   ^ Visible reasoning. GPT-5 uses hidden chain-of-thought.
-Patch size (chars)                        20,674       29,661       1.4x
+Patch size (chars)                       132,713       90,356       0.7x
   ^ Final submitted diff.
-Patch size (tokens)                        5,047        7,250       1.4x
+Patch size (tokens)                       43,498       26,126       0.6x
   ^ Tiktoken count of the submitted diff.
 
 METHODOLOGY & CAVEATS
@@ -144,5 +152,5 @@ What's NOT measured:
 - Input/output cost breakdown (only blended total).
 
 ======================================================================
-Generated from 146 paired instances (partial download).
+Generated from 616 paired instances (partial download).
 Full dataset: ~1460 trajectories across 11 repos, 4 languages.
