@@ -25,6 +25,7 @@ TRAJ_DIRS="data/gpt5/traj data/claude45/traj"
 EVAL_FILES="eval_results_gpt5.json eval_results_claude45.json"
 STATS_FILE="stats.json"
 REPORT_FILE="report.html"
+UNSUB_FILE="unsubmitted.html"
 DOCS_DIR="docs"
 
 echo "═══ SWE-Bench Pro Analysis Pipeline ═══"
@@ -43,9 +44,16 @@ echo "▸ Step 2: Build HTML report"
 python3 scripts/build_report.py "$STATS_FILE" -o "$REPORT_FILE"
 echo ""
 
-# Step 3: Copy to docs/ for GitHub Pages
+# Step 3: Build unsubmitted report
+echo "▸ Step 3: Build unsubmitted report"
+PAIRED=$(python3 -c "import json; d=json.load(open('$STATS_FILE')); print(len(d))")
+python3 scripts/build_unsubmitted_report.py "$STATS_FILE" -o "$UNSUB_FILE" --paired-count "$PAIRED"
+echo ""
+
+# Step 4: Copy to docs/ for GitHub Pages
 mkdir -p "$DOCS_DIR"
 cp "$REPORT_FILE" "$DOCS_DIR/index.html"
+cp "$UNSUB_FILE" "$DOCS_DIR/unsubmitted.html"
 echo ""
 
 echo "═══ Done ═══"

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SWE-Bench Pro: Unsubmitted Tasks</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; font-size: 13px; background: #0d1117; color: #c9d1d9; padding: 24px; line-height: 1.5; }
+h1 { font-size: 18px; color: #f0f6fc; margin-bottom: 4px; }
+h2 { font-size: 14px; color: #8b949e; font-weight: normal; margin-bottom: 20px; }
+h3 { font-size: 14px; color: #f0f6fc; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+th, td { text-align: right; padding: 4px 12px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+td:first-child { white-space: normal; max-width: 420px; }
+th { color: #8b949e; font-weight: normal; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+td:first-child, th:first-child { text-align: left; }
+tr:hover td { background: #161b22; }
+.section { margin-bottom: 32px; }
+.highlight-g { color: #3fb950; }
+.highlight-c { color: #a371f7; }
+.muted { color: #484f58; }
+.metric-desc { color: #484f58; font-size: 11px; font-weight: normal; font-style: italic; display: block; }
+.tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.tag-submitted { background: #1b3826; color: #3fb950; }
+.tag-not-submitted { background: #3d1f1f; color: #f85149; }
+.tag-resolved { background: #1b3826; color: #3fb950; }
+.tag-failed { background: #3d1f1f; color: #f85149; }
+a { color: #58a6ff; }
+</style>
+</head>
+<body>
+
+<h1>SWE-Bench Pro: Unsubmitted Tasks</h1>
+<h2>Instances where one or both models failed to submit a patch — filtered out of the main paired report</h2>
+
+<div id="report"></div>
+
+<script>
+const DATA = [{"instance_id":"instance_NodeBB__NodeBB-087e6020e490b4a1759f38c1ad03869511928263-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e","repo":"NodeBB/NodeBB","category":"claude_only","gpt5":{"instance_id":"instance_NodeBB__NodeBB-087e6020e490b4a1759f38c1ad03869511928263-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e","repo":"NodeBB/NodeBB","resolved":false,"submitted":false,"steps":32,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_error","model_stats":{"instance_cost":0.6003240000000002,"tokens_sent":829921,"tokens_received":0,"api_calls":32},"tokens_per_call":25935.03125,"output_tokens":{"content":10,"thought":0,"tool_call_args":656,"total":666},"tool_time":{"total_seconds":23.42821631534025,"mean_seconds":0.7321317598543828,"median_seconds":0.32674933201633394,"max_seconds":8.814593255054206,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":7,"view":16,"edit":0,"create":0,"search_find":8,"submit":0,"other":1},"content":{"observation_chars":200391,"action_chars":2245,"thought_chars":54,"response_chars":54}},"claude":{"instance_id":"instance_NodeBB__NodeBB-087e6020e490b4a1759f38c1ad03869511928263-vf2cf3cbd463b7ad942381f1c6d077626485a1e9e","repo":"NodeBB/NodeBB","resolved":false,"submitted":true,"steps":70,"patch_chars":31248,"patch_tokens":8205,"exit_status":"submitted","model_stats":{"instance_cost":16.935732000000005,"tokens_sent":3982372,"tokens_received":1663,"api_calls":70},"tokens_per_call":56891.02857142857,"output_tokens":{"content":1267,"thought":0,"tool_call_args":15363,"total":16630},"tool_time":{"total_seconds":36.11232402198948,"mean_seconds":0.5158903431712782,"median_seconds":0.3332966819871217,"max_seconds":10.486485009081662,"steps_over_10s":1,"steps_over_60s":0},"actions":{"bash":21,"view":16,"edit":5,"create":4,"search_find":22,"submit":1,"other":1},"content":{"observation_chars":481622,"action_chars":51782,"thought_chars":7724,"response_chars":7724}}},{"instance_id":"instance_NodeBB__NodeBB-b398321a5eb913666f903a794219833926881a8f-vd59a5728dfc977f44533186ace531248c2917516","repo":"NodeBB/NodeBB","category":"claude_only","gpt5":{"instance_id":"instance_NodeBB__NodeBB-b398321a5eb913666f903a794219833926881a8f-vd59a5728dfc977f44533186ace531248c2917516","repo":"NodeBB/NodeBB","resolved":false,"submitted":false,"steps":49,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_error","model_stats":{"instance_cost":1.0996025,"tokens_sent":1812752,"tokens_received":0,"api_calls":49},"tokens_per_call":36994.93877551021,"output_tokens":{"content":95,"thought":0,"tool_call_args":1099,"total":1194},"tool_time":{"total_seconds":32.728134194156155,"mean_seconds":0.6679211060031869,"median_seconds":0.4172741158399731,"max_seconds":7.881618814077228,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":14,"view":16,"edit":0,"create":0,"search_find":18,"submit":0,"other":1},"content":{"observation_chars":250793,"action_chars":2965,"thought_chars":320,"response_chars":320}},"claude":{"instance_id":"instance_NodeBB__NodeBB-b398321a5eb913666f903a794219833926881a8f-vd59a5728dfc977f44533186ace531248c2917516","repo":"NodeBB/NodeBB","resolved":false,"submitted":true,"steps":87,"patch_chars":166503,"patch_tokens":41426,"exit_status":"submitted","model_stats":{"instance_cost":15.837966000000003,"tokens_sent":3877955,"tokens_received":1740,"api_calls":87},"tokens_per_call":44574.19540229885,"output_tokens":{"content":877,"thought":0,"tool_call_args":19950,"total":20827},"tool_time":{"total_seconds":54.47122202301398,"mean_seconds":0.6261060002645285,"median_seconds":0.4222457918804139,"max_seconds":11.954930229112506,"steps_over_10s":1,"steps_over_60s":0},"actions":{"bash":19,"view":23,"edit":10,"create":8,"search_find":25,"submit":1,"other":1},"content":{"observation_chars":315638,"action_chars":76242,"thought_chars":7720,"response_chars":7720}}},{"instance_id":"instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed","repo":"NodeBB/NodeBB","category":"claude_only","gpt5":{"instance_id":"instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed","repo":"NodeBB/NodeBB","resolved":false,"submitted":false,"steps":32,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_command_timeout","model_stats":{"instance_cost":0.8036562500000001,"tokens_sent":1061997,"tokens_received":0,"api_calls":32},"tokens_per_call":33187.40625,"output_tokens":{"content":7,"thought":0,"tool_call_args":1448,"total":1455},"tool_time":{"total_seconds":12.466218187473714,"mean_seconds":0.3895693183585536,"median_seconds":0.2716414141468704,"max_seconds":1.3516465169377625,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":5,"view":13,"edit":1,"create":0,"search_find":12,"submit":0,"other":1},"content":{"observation_chars":271143,"action_chars":4733,"thought_chars":49,"response_chars":49}},"claude":{"instance_id":"instance_NodeBB__NodeBB-bd80d36e0dcf78cd4360791a82966078b3a07712-v4fbcfae8b15e4ce5d132c408bca69ebb9cf146ed","repo":"NodeBB/NodeBB","resolved":false,"submitted":true,"steps":78,"patch_chars":19430,"patch_tokens":4360,"exit_status":"submitted","model_stats":{"instance_cost":9.135477,"tokens_sent":2114632,"tokens_received":2437,"api_calls":78},"tokens_per_call":27110.666666666668,"output_tokens":{"content":1922,"thought":0,"tool_call_args":10630,"total":12552},"tool_time":{"total_seconds":1380.6976907725912,"mean_seconds":17.70125244580245,"median_seconds":0.2512704199180007,"max_seconds":450.97841343586333,"steps_over_10s":3,"steps_over_60s":3},"actions":{"bash":22,"view":15,"edit":3,"create":9,"search_find":27,"submit":1,"other":1},"content":{"observation_chars":138747,"action_chars":40051,"thought_chars":11377,"response_chars":11377}}},{"instance_id":"instance_NodeBB__NodeBB-f083cd559d69c16481376868c8da65172729c0ca-vnan","repo":"NodeBB/NodeBB","category":"gpt5_only","gpt5":{"instance_id":"instance_NodeBB__NodeBB-f083cd559d69c16481376868c8da65172729c0ca-vnan","repo":"NodeBB/NodeBB","resolved":false,"submitted":true,"steps":44,"patch_chars":105483,"patch_tokens":26838,"exit_status":"submitted","model_stats":{"instance_cost":1.4426317499999999,"tokens_sent":1964093,"tokens_received":0,"api_calls":44},"tokens_per_call":44638.47727272727,"output_tokens":{"content":0,"thought":0,"tool_call_args":2554,"total":2554},"tool_time":{"total_seconds":68.04768774285913,"mean_seconds":1.546538357792253,"median_seconds":0.5173367841634899,"max_seconds":13.920467121060938,"steps_over_10s":3,"steps_over_60s":0},"actions":{"bash":6,"view":22,"edit":7,"create":1,"search_find":7,"submit":1,"other":0},"content":{"observation_chars":344679,"action_chars":9539,"thought_chars":0,"response_chars":0}},"claude":{"instance_id":"instance_NodeBB__NodeBB-f083cd559d69c16481376868c8da65172729c0ca-vnan","repo":"NodeBB/NodeBB","resolved":false,"submitted":false,"steps":30,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_command_timeout","model_stats":{"instance_cost":2.329152,"tokens_sent":580370,"tokens_received":868,"api_calls":30},"tokens_per_call":19345.666666666668,"output_tokens":{"content":865,"thought":0,"tool_call_args":1568,"total":2433},"tool_time":{"total_seconds":18.920820839935914,"mean_seconds":0.6306940279978638,"median_seconds":0.5332289880607277,"max_seconds":1.6097133150324225,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":11,"view":9,"edit":1,"create":1,"search_find":7,"submit":0,"other":1},"content":{"observation_chars":86220,"action_chars":4818,"thought_chars":3730,"response_chars":3730}}},{"instance_id":"instance_ansible__ansible-b6290e1d156af608bd79118d209a64a051c55001-v390e508d27db7a51eece36bb6d9698b63a5b638a","repo":"ansible/ansible","category":"gpt5_only","gpt5":{"instance_id":"instance_ansible__ansible-b6290e1d156af608bd79118d209a64a051c55001-v390e508d27db7a51eece36bb6d9698b63a5b638a","repo":"ansible/ansible","resolved":false,"submitted":true,"steps":51,"patch_chars":18854,"patch_tokens":4823,"exit_status":"submitted","model_stats":{"instance_cost":2.00067975,"tokens_sent":3411714,"tokens_received":1602,"api_calls":51},"tokens_per_call":66896.35294117648,"output_tokens":{"content":0,"thought":0,"tool_call_args":6553,"total":6553},"tool_time":{"total_seconds":39.697879128856584,"mean_seconds":0.7783897868403252,"median_seconds":0.4528977540321648,"max_seconds":4.405791376950219,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":17,"view":19,"edit":0,"create":2,"search_find":11,"submit":1,"other":1},"content":{"observation_chars":393848,"action_chars":25240,"thought_chars":7376,"response_chars":7376}},"claude":{"instance_id":"instance_ansible__ansible-b6290e1d156af608bd79118d209a64a051c55001-v390e508d27db7a51eece36bb6d9698b63a5b638a","repo":"ansible/ansible","resolved":false,"submitted":false,"steps":35,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_format","model_stats":{"instance_cost":5.371161,"tokens_sent":960922,"tokens_received":368,"api_calls":34},"tokens_per_call":28262.41176470588,"output_tokens":{"content":283,"thought":0,"tool_call_args":582,"total":865},"tool_time":{"total_seconds":12.113832797855139,"mean_seconds":0.3461095085101468,"median_seconds":0.38524682307615876,"max_seconds":0.9187456199433655,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":1,"view":8,"edit":0,"create":8,"search_find":6,"submit":0,"other":12},"content":{"observation_chars":126427,"action_chars":1657,"thought_chars":1772,"response_chars":1772}}},{"instance_id":"instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59","repo":"ansible/ansible","category":"claude_only","gpt5":{"instance_id":"instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59","repo":"ansible/ansible","resolved":true,"submitted":false,"steps":12,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_error","model_stats":{"instance_cost":0.3373805,"tokens_sent":258872,"tokens_received":0,"api_calls":12},"tokens_per_call":21572.666666666668,"output_tokens":{"content":9,"thought":0,"tool_call_args":222,"total":231},"tool_time":{"total_seconds":9.607405902817845,"mean_seconds":0.8006171585681537,"median_seconds":0.43977667205035686,"max_seconds":3.4701222910080105,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":0,"view":8,"edit":0,"create":0,"search_find":3,"submit":0,"other":1},"content":{"observation_chars":240636,"action_chars":704,"thought_chars":45,"response_chars":45}},"claude":{"instance_id":"instance_ansible__ansible-d62496fe416623e88b90139dc7917080cb04ce70-v0f01c69f1e2528b935359cfe578530722bca2c59","repo":"ansible/ansible","resolved":true,"submitted":true,"steps":54,"patch_chars":6244,"patch_tokens":1932,"exit_status":"submitted","model_stats":{"instance_cost":6.203169,"tokens_sent":1480471,"tokens_received":2558,"api_calls":54},"tokens_per_call":27416.12962962963,"output_tokens":{"content":2050,"thought":0,"tool_call_args":12286,"total":14336},"tool_time":{"total_seconds":42.078135803109035,"mean_seconds":0.7792247370946117,"median_seconds":0.6220975141040981,"max_seconds":3.8233001951593906,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":34,"view":8,"edit":3,"create":5,"search_find":2,"submit":1,"other":1},"content":{"observation_chars":162487,"action_chars":41056,"thought_chars":10804,"response_chars":10804}}},{"instance_id":"instance_ansible__ansible-d6d2251929c84c3aa883bad7db0f19cc9ff0339e-v30a923fb5c164d6cd18280c02422f75e611e8fb2","repo":"ansible/ansible","category":"claude_only","gpt5":{"instance_id":"instance_ansible__ansible-d6d2251929c84c3aa883bad7db0f19cc9ff0339e-v30a923fb5c164d6cd18280c02422f75e611e8fb2","repo":"ansible/ansible","resolved":true,"submitted":false,"steps":66,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_context","model_stats":{"instance_cost":1.9000672500000004,"tokens_sent":3182464,"tokens_received":0,"api_calls":65},"tokens_per_call":48960.984615384616,"output_tokens":{"content":5,"thought":0,"tool_call_args":1675,"total":1680},"tool_time":{"total_seconds":36.69775664340705,"mean_seconds":0.5560266158091977,"median_seconds":0.42602230492047966,"max_seconds":2.9891248599160463,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":4,"view":45,"edit":0,"create":0,"search_find":16,"submit":0,"other":1},"content":{"observation_chars":499445,"action_chars":5222,"thought_chars":26,"response_chars":26}},"claude":{"instance_id":"instance_ansible__ansible-d6d2251929c84c3aa883bad7db0f19cc9ff0339e-v30a923fb5c164d6cd18280c02422f75e611e8fb2","repo":"ansible/ansible","resolved":true,"submitted":true,"steps":132,"patch_chars":3736,"patch_tokens":821,"exit_status":"submitted","model_stats":{"instance_cost":22.734992999999996,"tokens_sent":5720388,"tokens_received":6550,"api_calls":132},"tokens_per_call":43336.27272727273,"output_tokens":{"content":6165,"thought":0,"tool_call_args":22961,"total":29126},"tool_time":{"total_seconds":990.846215973841,"mean_seconds":7.506410727074553,"median_seconds":0.5326115768402815,"max_seconds":452.46649949415587,"steps_over_10s":2,"steps_over_60s":2},"actions":{"bash":82,"view":22,"edit":16,"create":8,"search_find":2,"submit":1,"other":1},"content":{"observation_chars":170325,"action_chars":85998,"thought_chars":29309,"response_chars":29309}}},{"instance_id":"instance_element-hq__element-web-2760bfc8369f1bee640d6d7a7e910783143d4c5f-vnan","repo":"element-hq/element","category":"claude_only","gpt5":{"instance_id":"instance_element-hq__element-web-2760bfc8369f1bee640d6d7a7e910783143d4c5f-vnan","repo":"element-hq/element","resolved":false,"submitted":false,"steps":18,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_error","model_stats":{"instance_cost":0.22773825000000003,"tokens_sent":211373,"tokens_received":0,"api_calls":18},"tokens_per_call":11742.944444444445,"output_tokens":{"content":10,"thought":0,"tool_call_args":466,"total":476},"tool_time":{"total_seconds":5.053152060136199,"mean_seconds":0.28073067000756663,"median_seconds":0.2719256051350385,"max_seconds":0.7497948240488768,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":5,"view":7,"edit":0,"create":0,"search_find":5,"submit":0,"other":1},"content":{"observation_chars":110069,"action_chars":1308,"thought_chars":54,"response_chars":54}},"claude":{"instance_id":"instance_element-hq__element-web-2760bfc8369f1bee640d6d7a7e910783143d4c5f-vnan","repo":"element-hq/element","resolved":false,"submitted":true,"steps":49,"patch_chars":27150,"patch_tokens":6566,"exit_status":"submitted (exit_error)","model_stats":{"instance_cost":6.533553000000001,"tokens_sent":1553661,"tokens_received":971,"api_calls":48},"tokens_per_call":32367.9375,"output_tokens":{"content":1213,"thought":0,"tool_call_args":15491,"total":16704},"tool_time":{"total_seconds":110.31635784171522,"mean_seconds":2.2513542416676575,"median_seconds":0.5129607601556927,"max_seconds":36.80971771012992,"steps_over_10s":5,"steps_over_60s":0},"actions":{"bash":9,"view":14,"edit":7,"create":5,"search_find":13,"submit":0,"other":1},"content":{"observation_chars":149845,"action_chars":63547,"thought_chars":5423,"response_chars":5423}}},{"instance_id":"instance_element-hq__element-web-582a1b093fc0b77538052f45cbb9c7295f991b51-vnan","repo":"element-hq/element","category":"claude_only","gpt5":{"instance_id":"instance_element-hq__element-web-582a1b093fc0b77538052f45cbb9c7295f991b51-vnan","repo":"element-hq/element","resolved":false,"submitted":false,"steps":8,"patch_chars":0,"patch_tokens":0,"exit_status":"exit_error","model_stats":{"instance_cost":0.07167,"tokens_sent":76533,"tokens_received":0,"api_calls":8},"tokens_per_call":9566.625,"output_tokens":{"content":10,"thought":0,"tool_call_args":137,"total":147},"tool_time":{"total_seconds":2.7972544610965997,"mean_seconds":0.34965680763707496,"median_seconds":0.38130665104836226,"max_seconds":0.5003408151678741,"steps_over_10s":0,"steps_over_60s":0},"actions":{"bash":5,"view":2,"edit":0,"create":0,"search_find":0,"submit":0,"other":1},"content":{"observation_chars":39860,"action_chars":325,"thought_chars":54,"response_chars":54}},"claude":{"instance_id":"instance_element-hq__element-web-582a1b093fc0b77538052f45cbb9c7295f991b51-vnan","repo":"element-hq/element","resolved":false,"submitted":true,"steps":58,"patch_chars":52717,"patch_tokens":12632,"exit_status":"submitted","model_stats":{"instance_cost":9.192006000000003,"tokens_sent":2241954,"tokens_received":4679,"api_calls":58},"tokens_per_call":38654.379310344826,"output_tokens":{"content":4134,"thought":0,"tool_call_args":22320,"total":26454},"tool_time":{"total_seconds":97.1528070922941,"mean_seconds":1.6750483981430018,"median_seconds":0.340386379044503,"max_seconds":21.515902838902548,"steps_over_10s":2,"steps_over_60s":0},"actions":{"bash":19,"view":13,"edit":7,"create":8,"search_find":9,"submit":1,"other":1},"content":{"observation_chars":233933,"action_chars":82231,"thought_chars":22091,"response_chars":22091}}}];
+
+function fmt(n, dec) {
+  if (dec === undefined) dec = 0;
+  if (n === Infinity || n === -Infinity || isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtD(n) { return '$' + fmt(n, 2); }
+function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
+
+function tag(submitted, resolved) {
+  if (!submitted) return '<span class="tag tag-not-submitted">not submitted</span>';
+  if (resolved) return '<span class="tag tag-resolved">resolved ✓</span>';
+  return '<span class="tag tag-failed">submitted, wrong</span>';
+}
+
+function render() {
+  let html = '';
+
+  // Summary
+  const nGOnly = DATA.filter(d => d.category === 'gpt5_only').length;
+  const nCOnly = DATA.filter(d => d.category === 'claude_only').length;
+  const nNeither = DATA.filter(d => d.category === 'neither').length;
+
+  html += '<div class="section"><h3>Summary</h3><table>';
+  html += '<tr><th style="text-align:left">Category</th><th>Count</th><th>Description</th></tr>';
+  html += `<tr><td>GPT-5 submitted, Claude didn't</td><td>${nGOnly}</td><td class="muted">Claude hit a limit or errored out</td></tr>`;
+  html += `<tr><td>Claude submitted, GPT-5 didn't</td><td>${nCOnly}</td><td class="muted">GPT-5 hit a limit or errored out</td></tr>`;
+  html += `<tr><td>Neither submitted</td><td>${nNeither}</td><td class="muted">Both gave up</td></tr>`;
+  html += `<tr><td><b>Total</b></td><td><b>${DATA.length}</b></td><td></td></tr>`;
+  html += '</table></div>';
+
+  // Exit status breakdown
+  const exitCounts = {};
+  DATA.forEach(d => {
+    ['gpt5', 'claude'].forEach(model => {
+      if (!d[model].submitted) {
+        const key = model + ': ' + (d[model].exit_status || 'unknown');
+        exitCounts[key] = (exitCounts[key] || 0) + 1;
+      }
+    });
+  });
+
+  html += '<div class="section"><h3>Why models didn\'t submit</h3>';
+  html += '<p class="metric-desc">Exit status from SWE-Agent when the agent stopped without submitting a patch.</p>';
+  html += '<table>';
+  html += '<tr><th style="text-align:left">Exit status</th><th>Count</th></tr>';
+  Object.entries(exitCounts).sort((a, b) => b[1] - a[1]).forEach(([key, count]) => {
+    html += `<tr><td>${key}</td><td>${count}</td></tr>`;
+  });
+  html += '</table></div>';
+
+  // Spending before giving up
+  const unsub = DATA.flatMap(d => {
+    const out = [];
+    if (!d.gpt5.submitted) out.push({model: 'GPT-5', ...d.gpt5});
+    if (!d.claude.submitted) out.push({model: 'Claude Sonnet 4.5', ...d.claude});
+    return out;
+  });
+  const gUnsub = unsub.filter(s => s.model === 'GPT-5');
+  const cUnsub = unsub.filter(s => s.model === 'Claude Sonnet 4.5');
+
+  html += '<div class="section"><h3>Resources spent before giving up</h3>';
+  html += '<p class="metric-desc">What each model consumed on tasks where it failed to submit — wasted spend.</p>';
+  html += '<table>';
+  html += '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Claude Sonnet 4.5</th></tr>';
+
+  function row(label, gArr, cArr, dollar) {
+    const gv = gArr.length ? mean(gArr) : 0;
+    const cv = cArr.length ? mean(cArr) : 0;
+    const gs = dollar ? fmtD(gv) : fmt(gv, 0);
+    const cs = dollar ? fmtD(cv) : fmt(cv, 0);
+    const gn = gArr.length ? ` (n=${gArr.length})` : ' —';
+    const cn = cArr.length ? ` (n=${cArr.length})` : ' —';
+    html += `<tr><td>${label}</td><td class="highlight-g">${gArr.length ? gs : '—'}${gArr.length ? '' : ''}</td><td class="highlight-c">${cArr.length ? cs : '—'}</td></tr>`;
+  }
+
+  row('Mean cost', gUnsub.map(s => s.model_stats.instance_cost), cUnsub.map(s => s.model_stats.instance_cost), true);
+  row('Mean steps', gUnsub.map(s => s.steps), cUnsub.map(s => s.steps));
+  row('Mean input tokens', gUnsub.map(s => s.model_stats.tokens_sent), cUnsub.map(s => s.model_stats.tokens_sent));
+  row('Mean output tokens', gUnsub.map(s => s.output_tokens.total), cUnsub.map(s => s.output_tokens.total));
+  html += `<tr><td>Unsubmitted instances</td><td class="muted">${gUnsub.length}</td><td class="muted">${cUnsub.length}</td></tr>`;
+  html += '</table></div>';
+
+  // Did the OTHER model succeed?
+  html += '<div class="section"><h3>Did the other model succeed?</h3>';
+  html += '<p class="metric-desc">When one model gave up, did the other submit and resolve the task?</p>';
+  html += '<table>';
+  html += '<tr><th style="text-align:left">Scenario</th><th>Count</th></tr>';
+
+  let gQuit_cResolved = 0, gQuit_cSubmitted = 0, gQuit_cFailed = 0;
+  let cQuit_gResolved = 0, cQuit_gSubmitted = 0, cQuit_gFailed = 0;
+  DATA.forEach(d => {
+    if (!d.gpt5.submitted && d.claude.submitted) {
+      gQuit_cSubmitted++;
+      if (d.claude.resolved) gQuit_cResolved++;
+      else gQuit_cFailed++;
+    }
+    if (!d.claude.submitted && d.gpt5.submitted) {
+      cQuit_gSubmitted++;
+      if (d.gpt5.resolved) cQuit_gResolved++;
+      else cQuit_gFailed++;
+    }
+  });
+
+  html += `<tr><td>GPT-5 quit → Claude resolved</td><td>${gQuit_cResolved}</td></tr>`;
+  html += `<tr><td>GPT-5 quit → Claude submitted but wrong</td><td>${gQuit_cFailed}</td></tr>`;
+  html += `<tr><td>Claude quit → GPT-5 resolved</td><td>${cQuit_gResolved}</td></tr>`;
+  html += `<tr><td>Claude quit → GPT-5 submitted but wrong</td><td>${cQuit_gFailed}</td></tr>`;
+  html += '</table></div>';
+
+  // Per-instance detail
+  html += '<div class="section"><h3>Per-Instance Detail</h3><table>';
+  html += '<tr><th style="text-align:left">Instance</th><th style="text-align:left">Repo</th>';
+  html += '<th>GPT-5 status</th><th>Claude status</th>';
+  html += '<th>$ GPT-5</th><th>$ Claude</th>';
+  html += '<th>Steps G</th><th>Steps C</th>';
+  html += '<th style="text-align:left">GPT-5 exit</th><th style="text-align:left">Claude exit</th></tr>';
+
+  DATA.forEach(d => {
+    const shortId = d.instance_id.replace('instance_', '');
+    const truncId = shortId.length > 55 ? shortId.slice(0, 55) + '…' : shortId;
+    html += '<tr>';
+    html += `<td title="${shortId}" style="font-size:11px;max-width:350px;overflow:hidden;text-overflow:ellipsis">${truncId}</td>`;
+    html += `<td>${d.repo}</td>`;
+    html += `<td>${tag(d.gpt5.submitted, d.gpt5.resolved)}</td>`;
+    html += `<td>${tag(d.claude.submitted, d.claude.resolved)}</td>`;
+    html += `<td class="highlight-g">${fmtD(d.gpt5.model_stats.instance_cost)}</td>`;
+    html += `<td class="highlight-c">${fmtD(d.claude.model_stats.instance_cost)}</td>`;
+    html += `<td class="highlight-g">${d.gpt5.steps}</td>`;
+    html += `<td class="highlight-c">${d.claude.steps}</td>`;
+    html += `<td style="text-align:left">${d.gpt5.exit_status}</td>`;
+    html += `<td style="text-align:left">${d.claude.exit_status}</td>`;
+    html += '</tr>';
+  });
+  html += '</table></div>';
+
+  html += '<p class="muted" style="margin-top:24px">Data: ' + DATA.length + ' instances where at least one model did not submit. ';
+  html += 'See <a href="index.html">main report</a> for the ' + 319 + ' paired submitted instances.</p>';
+
+  document.getElementById('report').innerHTML = html;
+}
+
+render();
+</script>
+</body>
+</html>
