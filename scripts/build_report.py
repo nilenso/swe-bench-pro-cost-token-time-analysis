@@ -124,6 +124,8 @@ a:hover { text-decoration: underline; }
 <p>I downloaded all 1,460 trajectory files (~23 GB), extracted per-instance cost, token counts, tool execution time, and action breakdowns, then paired them for direct comparison. Both runs use the same scaffold (SWE-Agent v1.1.0), same tools, same prompt, 250-turn limit, no cost limit. GPT-5 runs with <code>reasoning_effort: high</code>. Sonnet 4.5 uses default settings.</p>
 </div>
 
+<p style="color:#999;font-size:14px;margin-bottom:16px;">The overall patterns hold across repos, but the magnitudes vary. Filter by repo to see how.</p>
+
 <div class="filters">
   <div class="filter-group">
     <label>Outcome</label>
