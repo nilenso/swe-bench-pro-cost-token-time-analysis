@@ -117,7 +117,7 @@ a:hover { text-decoration: underline; }
 <h2>Cost, tokens, and execution time from the publicly available trajectory data</h2>
 
 <div class="section">
-<p>My intuitions about GPT being slow and token hungry were wrong. I had a feel for how these models worked from daily use, but that feel was built from my own tasks and my own repos. Benchmarks exist because vibes can mislead, but most benchmarks report accuracy without reporting how long things take, how many tokens get burned, or how much code gets written along the way.</p>
+<p>My intuitions about GPT being slow and token hungry were wrong. I had a feel for how these models worked from daily use, but that feel was built from my own tasks and my own repos. Benchmarks exist because vibes can mislead, but I couldn't find a reliable benchmark that compared execution time, tokens and cost across models.</p>
 
 <p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates but not cost, tokens, or time. The raw trajectory data is <a href="https://github.com/scaleapi/SWE-bench_Pro-os">publicly available</a>, and I wanted to check my assumptions against it. These are October 2025 models (GPT-5 and Sonnet 4.5), run under identical conditions on the <a href="https://github.com/SWE-agent/SWE-agent">SWE-Agent</a> scaffold. The coding agent landscape has <a href="https://simonwillison.net/2026/Jan/4/inflection/">changed significantly</a> since then. This data is a snapshot, not the current state of things.</p>
 
