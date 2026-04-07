@@ -282,7 +282,9 @@ function render(filtered) {
   html += '<div class="section"><h3>Cost</h3>';
   html += `<p class="prose">Each task has an API cost reported by litellm — the total bill for input tokens, output tokens, and any hidden reasoning. These costs reflect Scale AI's internal proxy pricing, not public list prices. At list prices the ratio would differ because GPT-5 sends more input tokens at a lower per-token rate.</p>`;
 
-  html += '<div class="cost-layout">';
+  html += '<div class="fig"><div class="fig-row">';
+  html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
+  html += '</div></div>';
   html += '<table>' + hdr;
   html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task.'});
   html += aggRow('Median', gCost, cCost, {fn: median, dollar: true, desc: 'Middle value — less affected by outliers.'});
@@ -290,8 +292,6 @@ function render(filtered) {
   html += `<tr><td>Cost per resolve<span class="metric-desc">Total spend ÷ tasks fixed.</span></td><td class="highlight-g">${fmtD(gCPR)}</td><td class="highlight-c">${fmtD(cCPR)}</td><td class="ratio">${ratio(cCPR, gCPR)}</td></tr>`;
   html += `<tr><td>GPT-5 more expensive</td><td colspan="3" class="muted">${gMoreExp}/${n} instances</td></tr>`;
   html += '</table>';
-  html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
-  html += '</div>';
 
   html += '</div>';
 
