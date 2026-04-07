@@ -404,36 +404,27 @@ function render(filtered) {
 
   html += '</div>';
 
-  // ── EXECUTION TIME ───────────────────────────────────────────────
+  // ── EXECUTION ────────────────────────────────────────────────────
   html += '<div class="section"><h3>Execution</h3>';
 
-  // Histograms first
+  const stRat = mean(cSt) / mean(gSt);
+
+  // Summary
+  html += `<p class="prose">Sonnet 4.5 takes more steps and more API calls. Tool execution time is comparable. What differs is how each model spends its turns.</p>`;
+
+  // Histograms
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gTT, cTT, {title: 'Tool time per instance (s)', fmtTick: v => v.toFixed(0) + 's'});
   html += histogram(gSt, cSt, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites). Does not include model inference time, which is not recorded in this dataset. Right: number of agent steps, where each step is one model turn followed by one tool execution. X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites). Right: number of agent steps, where each step is one model turn followed by one tool execution. Wall-clock time and model inference latency are not recorded in this dataset. X-axis is log-scaled.</p>`;
   html += '</div>';
 
   // Prose
-  const stRat = mean(cSt) / mean(gSt);
-  html += `<p class="prose">Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task: ${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}, making ${fmt(mean(cCalls),0)} API calls to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}).</p>`;
-  html += `<p class="prose">Tool execution time is comparable: ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Sonnet 4.5). Sonnet 4.5 triggers ${fmt(cO10,0)} tool calls over 10 seconds to GPT-5's ${fmt(gO10,0)}.</p>`;
+  html += `<p class="prose">Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task (${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}), making ${fmt(mean(cCalls),0)} API calls to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call: ${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}. Different strategies, similar total tool time (${fmt(mean(gTT),0)}s vs ${fmt(mean(cTT),0)}s).</p>`;
 
-  html += `<p class="prose">Wall-clock time and model inference latency are not recorded in this dataset. The times shown cover tool execution only: time spent waiting for shell commands, file operations, and test suites.</p>`;
-
-  // Table
-  html += '<table>' + hdr;
-  html += aggRow('API calls (mean)', gCalls, cCalls, {desc: 'Number of model roundtrips per task.'});
-  html += aggRow('Tokens/call (mean)', gTpc, cTpc, {desc: 'Average context size per call. Higher means the model carries more history each turn.'});
-  html += aggRow('Mean steps', gSt, cSt, {desc: 'Total model turns per task.'});
-  html += aggRow('Tool time, mean total (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task.'});
-  html += aggRow('Tool time, median total (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Less skewed by tasks with long test suites.'});
-  html += aggRow('Tool time, mean max step (s)', gMS, cMS, {dec: 1, desc: 'The single longest tool call in each task, averaged.'});
-  html += `<tr><td>Steps &gt;10s (total)<span class="metric-desc">Tool calls that took over 10 seconds.</span></td><td class="highlight-g">${gO10}</td><td class="highlight-c">${cO10}</td><td class="ratio">${ratio(cO10, gO10)}</td></tr>`;
-  html += '</table>';
-
-  // Actions breakdown
+  // Actions
+  html += `<p class="prose">The action breakdown shows where those steps go.</p>`;
   const aKeys = ['bash', 'view', 'edit', 'create', 'search_find', 'submit', 'other'];
   const aDescs = {
     bash: 'Shell commands: running tests, installing deps, checking output.',
@@ -444,11 +435,19 @@ function render(filtered) {
     submit: 'Final patch submission.',
     other: 'Unclassified actions.',
   };
-  html += '<h4 style="font-size:13px;color:#8b949e;margin:16px 0 4px">Actions per step</h4>';
   html += '<table>' + hdr;
   aKeys.forEach(k => {
     html += aggRow(k, g.map(s => s.actions[k]), c.map(s => s.actions[k]), {dec: 1, desc: aDescs[k]});
   });
+  html += '</table>';
+
+  // Reference table
+  html += '<table>' + hdr;
+  html += aggRow('Steps (mean)', gSt, cSt, {desc: 'Total model turns per task.'});
+  html += aggRow('API calls (mean)', gCalls, cCalls, {desc: 'Number of model roundtrips per task.'});
+  html += aggRow('Tokens/call (mean)', gTpc, cTpc, {desc: 'Average context size per call.'});
+  html += aggRow('Tool time, mean (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task.'});
+  html += aggRow('Tool time, median (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Less skewed by tasks with long test suites.'});
   html += '</table>';
   html += '</div>';
 
