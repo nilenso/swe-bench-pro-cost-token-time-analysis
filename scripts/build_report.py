@@ -58,7 +58,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SWE-Bench Pro: GPT-5 vs Claude Sonnet 4.5</title>
+<title>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; background: #191919; color: #d4d4d4; padding: 32px 24px 64px; line-height: 1.7; }
@@ -113,7 +113,7 @@ a:hover { text-decoration: underline; }
 <body>
 <div class="wrap">
 
-<h1>SWE-Bench Pro: GPT-5 vs Claude Sonnet 4.5</h1>
+<h1>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</h1>
 <h2>Paired comparison &mdash; both models submitted a patch on the same task</h2>
 
 <div class="filters">
@@ -123,7 +123,7 @@ a:hover { text-decoration: underline; }
       <option value="all">All submitted</option>
       <option value="both">Both resolved</option>
       <option value="gpt5-only">Only GPT-5 resolved</option>
-      <option value="claude-only">Only Claude Sonnet 4.5 resolved</option>
+      <option value="claude-only">Only Sonnet 4.5 resolved</option>
       <option value="neither">Neither resolved</option>
     </select>
   </div>
@@ -264,7 +264,7 @@ function histogram(gVals, cVals, opts) {
   svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
   svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5</text>`;
   svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
-  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">CS4.5</text>`;
+  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">S4.5</text>`;
   svg += '</svg>';
   return `<div class="fig-box"><h4>${title}</h4>${svg}</div>`;
 }
@@ -292,13 +292,13 @@ function render(filtered) {
   const cResolved = nBoth + nCOnly;
   const repoCounts = {};
   filtered.forEach(p => { repoCounts[p.repo] = (repoCounts[p.repo] || 0) + 1; });
-  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Claude Sonnet 4.5</th><th>C/G</th></tr>';
+  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Sonnet 4.5</th><th>S/G</th></tr>';
 
   let html = '';
 
   // ── OUTCOME ──────────────────────────────────────────────────────
   html += '<div class="section"><h3>Outcome</h3>';
-  html += `<p class="prose">${n} instances where both models submitted a patch on the same task. GPT-5 resolved ${gResolved} (${pct(gResolved,n)}), Claude Sonnet 4.5 resolved ${cResolved} (${pct(cResolved,n)}). Both solved ${nBoth}, only GPT-5 solved ${nGOnly}, only Claude ${nCOnly}, neither solved ${nNeither}.</p>`;
+  html += `<p class="prose">${n} instances where both models submitted a patch on the same task. GPT-5 resolved ${gResolved} (${pct(gResolved,n)}), Sonnet 4.5 resolved ${cResolved} (${pct(cResolved,n)}). Both solved ${nBoth}, only GPT-5 solved ${nGOnly}, only Sonnet 4.5 solved ${nCOnly}, neither solved ${nNeither}.</p>`;
   html += '</div>';
 
   // ── Shared data arrays ───────────────────────────────────────────
@@ -358,16 +358,16 @@ function render(filtered) {
   html += histogram(gIn, cIn, {title: 'Input tokens per instance', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
   html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Figure: Token distributions per instance.</b> Left: total input tokens sent across all API calls (conversation history accumulates each turn — like context window usage in Claude Code). Right: visible output tokens the model produced (response text + tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included here. X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Figure: Token distributions per instance.</b> Left: total input tokens sent across all API calls (conversation history accumulates each turn — like context window usage in a coding agent). Right: visible output tokens the model produced (response text + tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included here. X-axis is log-scaled.</p>`;
   html += '</div>';
 
   // Prose
   const inRat = mean(gIn) / mean(cIn);
   const outRat = mean(cOut) / mean(gOut);
-  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Claude Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Claude produces ${fmt(outRat,1)}× more visible output tokens — primarily in tool call arguments (file edits, shell commands). Claude's output is dominated by file creation: it creates ${fmt(mean(g.map(s=>s.actions.create)),1)} vs ${fmt(mean(c.map(s=>s.actions.create)),1)} files per task, many of which are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
+  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Sonnet 4.5 produces ${fmt(outRat,1)}× more visible output tokens — primarily in tool call arguments (file edits, shell commands). Sonnet 4.5's output is dominated by file creation: it creates ${fmt(mean(g.map(s=>s.actions.create)),1)} vs ${fmt(mean(c.map(s=>s.actions.create)),1)} files per task, many of which are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
 
   // Patch
-  html += `<p class="prose">The submitted patches themselves are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Claude Sonnet 4.5) on average — a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio, much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
+  html += `<p class="prose">The submitted patches themselves are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Sonnet 4.5) on average — a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio, much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
 
   // Table
   html += '<table>' + hdr;
@@ -399,12 +399,12 @@ function render(filtered) {
   html += histogram(gTT, cTT, {title: 'Tool time per instance (s)', fmtTick: v => v.toFixed(0) + 's'});
   html += histogram(gSt, cSt, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Figure: Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites) — like the "running bash…" wait in Claude Code. This does not include model inference time, which is not recorded in this dataset. Right: number of agent steps (each step = one model turn → tool execution cycle). X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Figure: Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites) — like the "running bash…" wait in a coding agent. This does not include model inference time, which is not recorded in this dataset. Right: number of agent steps (each step = one model turn → tool execution cycle). X-axis is log-scaled.</p>`;
   html += '</div>';
 
   // Prose
   const stRat = mean(cSt) / mean(gSt);
-  html += `<p class="prose">Claude Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task (${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}), making ${fmt(mean(cCalls),0)} API calls compared to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}). Tool execution time is comparable at ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Claude), though Claude triggers ${fmt(cO10,0)} tool calls over 10 seconds compared to GPT-5's ${fmt(gO10,0)}.</p>`;
+  html += `<p class="prose">Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task (${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}), making ${fmt(mean(cCalls),0)} API calls compared to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}). Tool execution time is comparable at ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Sonnet 4.5), though Sonnet 4.5 triggers ${fmt(cO10,0)} tool calls over 10 seconds compared to GPT-5's ${fmt(gO10,0)}.</p>`;
 
   html += `<p class="prose">Note: wall-clock time and model inference latency are not recorded anywhere in this dataset. The times shown are tool execution only — the time the agent spends waiting for shell commands, file operations, and test suites to complete.</p>`;
 
@@ -440,7 +440,7 @@ function render(filtered) {
 
   // ── REPOS ────────────────────────────────────────────────────────
   html += '<div class="section"><h3>Repos</h3><table>';
-  html += '<tr><th style="text-align:left">Repo</th><th>Instances</th><th>GPT-5 resolved</th><th>Claude Sonnet 4.5 resolved</th></tr>';
+  html += '<tr><th style="text-align:left">Repo</th><th>Instances</th><th>GPT-5 resolved</th><th>Sonnet 4.5 resolved</th></tr>';
   Object.keys(repoCounts).sort().forEach(repo => {
     const rp = filtered.filter(p => p.repo === repo);
     const rg = rp.filter(p => p.gpt5.resolved === true).length;
@@ -455,15 +455,15 @@ function render(filtered) {
     { key: 'repo', label: 'Repo', sortFn: (p) => p.repo },
     { key: 'outcome', label: 'Outcome', sortFn: (p) => outcomeOf(p) },
     { key: 'gpt5_cost', label: '$ GPT-5', sortFn: (p) => p.gpt5.model_stats.instance_cost },
-    { key: 'claude_cost', label: '$ Claude S4.5', sortFn: (p) => p.claude.model_stats.instance_cost },
+    { key: 'claude_cost', label: '$ Sonnet 4.5', sortFn: (p) => p.claude.model_stats.instance_cost },
     { key: 'gpt5_steps', label: 'Steps GPT-5', sortFn: (p) => p.gpt5.steps },
-    { key: 'claude_steps', label: 'Steps CS4.5', sortFn: (p) => p.claude.steps },
+    { key: 'claude_steps', label: 'Steps S4.5', sortFn: (p) => p.claude.steps },
     { key: 'gpt5_input', label: 'Input GPT-5', sortFn: (p) => p.gpt5.model_stats.tokens_sent },
-    { key: 'claude_input', label: 'Input CS4.5', sortFn: (p) => p.claude.model_stats.tokens_sent },
+    { key: 'claude_input', label: 'Input S4.5', sortFn: (p) => p.claude.model_stats.tokens_sent },
     { key: 'gpt5_output', label: 'Out GPT-5', sortFn: (p) => p.gpt5.output_tokens.total },
-    { key: 'claude_output', label: 'Out CS4.5', sortFn: (p) => p.claude.output_tokens.total },
+    { key: 'claude_output', label: 'Out S4.5', sortFn: (p) => p.claude.output_tokens.total },
     { key: 'gpt5_patch', label: 'Patch GPT-5', sortFn: (p) => p.gpt5.patch_chars },
-    { key: 'claude_patch', label: 'Patch CS4.5', sortFn: (p) => p.claude.patch_chars },
+    { key: 'claude_patch', label: 'Patch S4.5', sortFn: (p) => p.claude.patch_chars },
   ];
 
   const colDef = cols.find(c => c.key === sortCol) || cols[3];
