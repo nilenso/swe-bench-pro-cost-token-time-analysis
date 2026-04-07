@@ -59,16 +59,18 @@ a:hover { text-decoration: underline; }
 <div class="wrap">
 
 <h1>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</h1>
-<h2>Cost, tokens, and execution time &mdash; the operational data the leaderboard doesn&rsquo;t show</h2>
+<h2>Cost, tokens, and execution time from the publicly available trajectory data</h2>
 
 <div class="section">
-<p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates: which models fix which tasks. It does not report what those fixes cost in tokens, dollars, or time. The raw trajectory data is publicly available in an <a href="https://github.com/scaleapi/SWE-bench_Pro-os">S3 bucket</a>, but as far as we know, nobody has analyzed the operational metrics.</p>
+<p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates. It does not report what those fixes cost in tokens, dollars, or time. The raw trajectory data is publicly available in an <a href="https://github.com/scaleapi/SWE-bench_Pro-os">S3 bucket</a>, but we could not find anyone who has analyzed the operational metrics.</p>
 
-<p>This report does that. We downloaded all 1,460 trajectory files (~23 GB) for the GPT-5 and Sonnet 4.5 runs, extracted per-instance cost, token counts, tool execution time, and action breakdowns, and paired them for direct comparison.</p>
+<p>We downloaded all 1,460 trajectory files (~23 GB) for the GPT-5 and Sonnet 4.5 runs. We extracted per-instance cost, token counts, tool execution time, and action breakdowns, then paired them for direct comparison.</p>
 
-<p>Both runs use identical conditions: <a href="https://github.com/SWE-agent/SWE-agent">SWE-Agent</a> v1.1.0 scaffold, same tools, same prompt, 250-turn limit, no cost limit, both dated October 13, 2025. GPT-5 runs with <code>reasoning_effort: high</code>. Sonnet 4.5 uses default settings. This is as close to apples-to-apples as exists for these two models on a real software engineering benchmark.</p>
+<p>Both runs use identical conditions: <a href="https://github.com/SWE-agent/SWE-agent">SWE-Agent</a> v1.1.0 scaffold, same tools, same prompt, 250-turn limit, no cost limit, both dated October 13, 2025. GPT-5 runs with <code>reasoning_effort: high</code>. Sonnet 4.5 uses default settings.</p>
 
-<p>A few caveats up front: costs reflect Scale AI&rsquo;s internal litellm proxy pricing, not public list prices &mdash; the dollar amounts are not generalizable. Output token counts are measured via tiktoken and do not include GPT-5&rsquo;s hidden chain-of-thought reasoning tokens, which are billed but never appear in the response. Wall-clock time and model inference latency are not recorded anywhere in this dataset; we only have tool execution time. We also found and worked around a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug in SWE-Agent</a> where <code>tokens_received</code> only counts <code>message.content</code> and misses tool call arguments, undercounting output tokens by 7&ndash;8&times;.</p>
+<p>Costs here reflect Scale AI's internal litellm proxy pricing, not public list prices. The dollar amounts are not generalizable. Output token counts are measured via tiktoken and exclude GPT-5's hidden chain-of-thought reasoning tokens (billed but absent from the response). Wall-clock time and model inference latency are not recorded in this dataset. We only have tool execution time.</p>
+
+<p>We also found and worked around a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug in SWE-Agent</a> where <code>tokens_received</code> only counts <code>message.content</code> and misses tool call arguments, undercounting output tokens by 7-8x.</p>
 </div>
 
 <div class="filters">
@@ -290,14 +292,14 @@ function render(filtered) {
 
   // ── COST ─────────────────────────────────────────────────────────
   html += '<div class="section"><h3>Cost</h3>';
-  html += `<p class="prose">Each task has an API cost reported by litellm — the total bill for input tokens, output tokens, and any hidden reasoning. These costs reflect Scale AI's internal proxy pricing, not public list prices. At list prices the ratio would differ because GPT-5 sends more input tokens at a lower per-token rate.</p>`;
+  html += `<p class="prose">Each task has an API cost reported by litellm: the total bill for input tokens, output tokens, and any hidden reasoning. These costs reflect Scale AI's internal proxy pricing, not public list prices. At list prices the ratio would differ because GPT-5 sends more input tokens at a lower per-token rate.</p>`;
 
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
   html += '</div></div>';
   html += '<table>' + hdr;
   html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task.'});
-  html += aggRow('Median', gCost, cCost, {fn: median, dollar: true, desc: 'Middle value — less affected by outliers.'});
+  html += aggRow('Median', gCost, cCost, {fn: median, dollar: true, desc: 'Middle value, less affected by outliers.'});
   html += aggRow('Total', gCost, cCost, {fn: sum, dollar: true});
   html += `<tr><td>Cost per resolve<span class="metric-desc">Total spend ÷ tasks fixed.</span></td><td class="highlight-g">${fmtD(gCPR)}</td><td class="highlight-c">${fmtD(cCPR)}</td><td class="ratio">${ratio(cCPR, gCPR)}</td></tr>`;
   html += `<tr><td>GPT-5 more expensive</td><td colspan="3" class="muted">${gMoreExp}/${n} instances</td></tr>`;
@@ -313,23 +315,24 @@ function render(filtered) {
   html += histogram(gIn, cIn, {title: 'Input tokens per instance', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
   html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Figure: Token distributions per instance.</b> Left: total input tokens sent across all API calls (conversation history accumulates each turn — like context window usage in a coding agent). Right: visible output tokens the model produced (response text + tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included here. X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Token distributions per instance.</b> Left: total input tokens sent across all API calls. Conversation history accumulates each turn, so this grows with each step. Right: visible output tokens (response text plus tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included. X-axis is log-scaled.</p>`;
   html += '</div>';
 
   // Prose
   const inRat = mean(gIn) / mean(cIn);
   const outRat = mean(cOut) / mean(gOut);
-  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Sonnet 4.5 produces ${fmt(outRat,1)}× more visible output tokens — primarily in tool call arguments (file edits, shell commands). Sonnet 4.5's output is dominated by file creation: it creates ${fmt(mean(g.map(s=>s.actions.create)),1)} vs ${fmt(mean(c.map(s=>s.actions.create)),1)} files per task, many of which are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
+  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Sonnet 4.5 produces ${fmt(outRat,1)}× more visible output tokens, primarily in tool call arguments (file edits, shell commands).</p>`;
+  html += `<p class="prose">Sonnet 4.5's output is dominated by file creation: ${fmt(mean(c.map(s=>s.actions.create)),1)} new files per task vs GPT-5's ${fmt(mean(g.map(s=>s.actions.create)),1)}. Many of these are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
 
   // Patch
-  html += `<p class="prose">The submitted patches themselves are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Sonnet 4.5) on average — a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio, much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
+  html += `<p class="prose">The submitted patches are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Sonnet 4.5) on average, a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio. Much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
 
   // Table
   html += '<table>' + hdr;
   html += aggRow('Input tokens (mean)', gIn, cIn, {desc: 'Total tokens sent across all API calls. Grows each step as conversation history accumulates.'});
   html += aggRow('Output tokens (mean)', gOut, cOut, {desc: 'Response text + tool call arguments, via tiktoken. GPT-5 hidden reasoning not included.'});
-  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'Text portion of the response — explanations, reasoning shown to user.'});
-  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools — file edits, shell commands, search queries.'});
+  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'Text portion of the response. Explanations, reasoning shown to user.'});
+  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools: file edits, shell commands, search queries.'});
   html += aggRow('Patch size (tokens)', gPatTok, cPatTok, {desc: 'Tiktoken count of the final submitted diff.'});
   html += aggRow('Patch size (chars)', gPat, cPat, {desc: 'Character count of the submitted diff.'});
   const g1m = sum(gIn) > 0 ? sum(gCost) / sum(gIn) * 1e6 : 0;
@@ -341,7 +344,7 @@ function render(filtered) {
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gPatTok, cPatTok, {title: 'Patch size (tokens)', fmtTick: v => (v/1e3).toFixed(1) + 'K'});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Figure: Patch size distribution.</b> Tiktoken count of the final submitted diff. Larger patches are not necessarily better — they may include unnecessary changes.</p>`;
+  html += `<p class="fig-caption"><b>Patch size distribution.</b> Tiktoken count of the final submitted diff. Larger patches are not necessarily better and may include unnecessary changes.</p>`;
   html += '</div>';
 
   html += '</div>';
@@ -354,30 +357,31 @@ function render(filtered) {
   html += histogram(gTT, cTT, {title: 'Tool time per instance (s)', fmtTick: v => v.toFixed(0) + 's'});
   html += histogram(gSt, cSt, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Figure: Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites) — like the "running bash…" wait in a coding agent. This does not include model inference time, which is not recorded in this dataset. Right: number of agent steps (each step = one model turn → tool execution cycle). X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites). Does not include model inference time, which is not recorded in this dataset. Right: number of agent steps, where each step is one model turn followed by one tool execution. X-axis is log-scaled.</p>`;
   html += '</div>';
 
   // Prose
   const stRat = mean(cSt) / mean(gSt);
-  html += `<p class="prose">Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task (${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}), making ${fmt(mean(cCalls),0)} API calls compared to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}). Tool execution time is comparable at ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Sonnet 4.5), though Sonnet 4.5 triggers ${fmt(cO10,0)} tool calls over 10 seconds compared to GPT-5's ${fmt(gO10,0)}.</p>`;
+  html += `<p class="prose">Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task: ${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}, making ${fmt(mean(cCalls),0)} API calls to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}).</p>`;
+  html += `<p class="prose">Tool execution time is comparable: ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Sonnet 4.5). Sonnet 4.5 triggers ${fmt(cO10,0)} tool calls over 10 seconds to GPT-5's ${fmt(gO10,0)}.</p>`;
 
-  html += `<p class="prose">Note: wall-clock time and model inference latency are not recorded anywhere in this dataset. The times shown are tool execution only — the time the agent spends waiting for shell commands, file operations, and test suites to complete.</p>`;
+  html += `<p class="prose">Wall-clock time and model inference latency are not recorded in this dataset. The times shown cover tool execution only: time spent waiting for shell commands, file operations, and test suites.</p>`;
 
   // Table
   html += '<table>' + hdr;
   html += aggRow('API calls (mean)', gCalls, cCalls, {desc: 'Number of model roundtrips per task.'});
   html += aggRow('Tokens/call (mean)', gTpc, cTpc, {desc: 'Average context size per call. Higher means the model carries more history each turn.'});
   html += aggRow('Mean steps', gSt, cSt, {desc: 'Total model turns per task.'});
-  html += aggRow('Tool time — mean total (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task.'});
-  html += aggRow('Tool time — median total (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Less skewed by tasks with long test suites.'});
-  html += aggRow('Tool time — mean max step (s)', gMS, cMS, {dec: 1, desc: 'The single longest tool call in each task, averaged.'});
+  html += aggRow('Tool time, mean total (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task.'});
+  html += aggRow('Tool time, median total (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Less skewed by tasks with long test suites.'});
+  html += aggRow('Tool time, mean max step (s)', gMS, cMS, {dec: 1, desc: 'The single longest tool call in each task, averaged.'});
   html += `<tr><td>Steps &gt;10s (total)<span class="metric-desc">Tool calls that took over 10 seconds.</span></td><td class="highlight-g">${gO10}</td><td class="highlight-c">${cO10}</td><td class="ratio">${ratio(cO10, gO10)}</td></tr>`;
   html += '</table>';
 
   // Actions breakdown
   const aKeys = ['bash', 'view', 'edit', 'create', 'search_find', 'submit', 'other'];
   const aDescs = {
-    bash: 'Shell commands — running tests, installing deps, checking output.',
+    bash: 'Shell commands: running tests, installing deps, checking output.',
     view: 'Reading file contents.',
     edit: 'Modifying existing files.',
     create: 'Creating new files from scratch.',
@@ -477,6 +481,6 @@ document.getElementById('f-outcome').addEventListener('change', applyFilters);
 document.getElementById('f-repo').addEventListener('change', applyFilters);
 applyFilters();
 </script>
-<p style="max-width:720px;margin:32px auto 0;color:#555;font-size:13px;">See also: <a href="unsubmitted.html">Unsubmitted tasks report</a> &mdash; instances where one or both models failed to submit a patch.</p>
+<p style="max-width:720px;margin:32px auto 0;color:#555;font-size:13px;">See also: <a href="unsubmitted.html">Unsubmitted tasks report</a>, covering instances where one or both models failed to submit a patch.</p>
 </body>
 </html>
