@@ -6,51 +6,53 @@
 <title>SWE-Bench Pro: GPT-5 vs Claude Sonnet 4.5</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; font-size: 13px; background: #0d1117; color: #c9d1d9; padding: 24px; line-height: 1.6; }
-.wrap { max-width: 880px; margin: 0 auto; }
-h1 { font-size: 20px; color: #f0f6fc; margin-bottom: 4px; }
-h2 { font-size: 14px; color: #8b949e; font-weight: normal; margin-bottom: 16px; }
-h3 { font-size: 15px; color: #f0f6fc; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
-p { margin: 8px 0; color: #c9d1d9; }
-.prose { color: #8b949e; font-size: 13px; line-height: 1.6; margin: 8px 0 16px; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; background: #191919; color: #d4d4d4; padding: 32px 24px 64px; line-height: 1.7; }
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 28px; font-weight: 600; color: #f5f5f5; margin-bottom: 6px; letter-spacing: -0.3px; }
+h2 { font-size: 16px; color: #999; font-weight: 400; margin-bottom: 32px; line-height: 1.5; }
+h3 { font-size: 18px; font-weight: 600; color: #f5f5f5; margin: 48px 0 12px; letter-spacing: -0.2px; }
+p { margin: 12px 0; color: #bbb; line-height: 1.7; }
+.prose { color: #999; font-size: 15px; line-height: 1.7; margin: 8px 0 20px; }
 
-.filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; padding: 12px; background: #161b22; border: 1px solid #21262d; border-radius: 6px; align-items: center; }
-.filter-group { display: flex; align-items: center; gap: 6px; }
-.filter-group label { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-select { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px 8px; font-family: inherit; font-size: 13px; }
-.count-badge { background: #21262d; color: #8b949e; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; padding: 14px 16px; background: #222; border: 1px solid #333; border-radius: 8px; align-items: center; }
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-group label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+select { background: #191919; color: #d4d4d4; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; font-family: inherit; font-size: 14px; }
+.count-badge { background: #333; color: #999; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
 
-table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
-th, td { text-align: right; padding: 4px 12px; border-bottom: 1px solid #21262d; white-space: nowrap; }
-td:first-child { white-space: normal; max-width: 380px; }
-th { color: #8b949e; font-weight: normal; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; }
+th, td { text-align: right; padding: 6px 14px; border-bottom: 1px solid #2a2a2a; white-space: nowrap; }
+td:first-child { white-space: normal; max-width: 340px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; }
+th { color: #666; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 td:first-child, th:first-child { text-align: left; }
-tr:hover td { background: #161b22; }
-.section { margin-bottom: 36px; }
-.ratio { color: #484f58; font-size: 12px; }
-.highlight-g { color: #3fb950; }
-.highlight-c { color: #a371f7; }
-.muted { color: #484f58; }
-.metric-desc { color: #484f58; font-size: 11px; font-weight: normal; font-style: italic; display: block; }
+tr:hover td { background: #1e1e1e; }
+.section { margin-bottom: 48px; }
+.ratio { color: #555; font-size: 12px; }
+.highlight-g { color: #4ade80; }
+.highlight-c { color: #c084fc; }
+.muted { color: #555; }
+.metric-desc { color: #666; font-size: 12px; font-weight: normal; font-style: normal; display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-top: 1px; }
 
-.cost-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.cost-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; margin-top: 16px; }
 .cost-layout > table { flex: 1; min-width: 300px; }
-.cost-layout > .hist-box { flex: 1; min-width: 300px; }
+.cost-layout > .fig-box { flex: 1; min-width: 280px; }
 
-.fig { margin: 16px 0; }
+.fig { margin: 20px 0; }
 .fig-row { display: flex; gap: 24px; flex-wrap: wrap; }
-.fig-box { flex: 1; min-width: 380px; }
-.fig-box h4 { font-size: 12px; color: #8b949e; font-weight: normal; margin-bottom: 4px; }
-.fig-caption { color: #6e7681; font-size: 11px; font-style: italic; margin-top: 4px; line-height: 1.5; }
+.fig-box { flex: 1; min-width: 320px; }
+.fig-box h4 { font-size: 12px; color: #777; font-weight: 500; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.fig-caption { color: #666; font-size: 13px; margin-top: 8px; line-height: 1.6; }
+.fig-caption b { color: #999; font-weight: 500; }
 
-.per-instance-table { max-height: 600px; overflow-y: auto; margin-top: 8px; }
-.per-instance-table table { font-size: 12px; }
-.per-instance-table th { position: sticky; top: 0; background: #0d1117; z-index: 1; }
-.per-instance-table td.inst-id { max-width: 350px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.per-instance-table { max-height: 600px; overflow-y: auto; margin-top: 12px; border: 1px solid #2a2a2a; border-radius: 8px; }
+.per-instance-table table { font-size: 12px; margin: 0; }
+.per-instance-table th { position: sticky; top: 0; background: #222; z-index: 1; }
+.per-instance-table td.inst-id { max-width: 320px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 .sort-btn { cursor: pointer; user-select: none; }
-.sort-btn:hover { color: #f0f6fc; }
-.sort-btn.active { color: #58a6ff; }
-a { color: #58a6ff; }
+.sort-btn:hover { color: #f5f5f5; }
+.sort-btn.active { color: #93c5fd; }
+a { color: #93c5fd; text-decoration: none; }
+a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -181,8 +183,8 @@ function histogram(gVals, cVals, opts) {
   const yTicks = [0, Math.round(maxCount / 2), maxCount];
   yTicks.forEach(t => {
     const y = PAD.t + ph - (t / maxCount) * ph;
-    svg += `<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + pw}" y2="${y}" stroke="#21262d" stroke-width="1"/>`;
-    svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#484f58" font-size="10">${t}</text>`;
+    svg += `<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + pw}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/>`;
+    svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${t}</text>`;
   });
 
   for (let i = 0; i < nBins; i++) {
@@ -190,9 +192,9 @@ function histogram(gVals, cVals, opts) {
     const gh = (gBins[i] / maxCount) * ph;
     const ch = (cBins[i] / maxCount) * ph;
     if (gBins[i] > 0)
-      svg += `<rect x="${x}" y="${PAD.t + ph - gh}" width="${barW - 1}" height="${gh}" fill="#3fb950" opacity="0.5"/>`;
+      svg += `<rect x="${x}" y="${PAD.t + ph - gh}" width="${barW - 1}" height="${gh}" fill="#4ade80" opacity="0.45"/>`;
     if (cBins[i] > 0)
-      svg += `<rect x="${x}" y="${PAD.t + ph - ch}" width="${barW - 1}" height="${ch}" fill="#a371f7" opacity="0.5"/>`;
+      svg += `<rect x="${x}" y="${PAD.t + ph - ch}" width="${barW - 1}" height="${ch}" fill="#c084fc" opacity="0.45"/>`;
   }
 
   const xTickCount = Math.min(5, nBins);
@@ -200,14 +202,14 @@ function histogram(gVals, cVals, opts) {
     const logVal = logLo + (logRange * i / xTickCount);
     const val = Math.pow(10, logVal);
     const x = PAD.l + (i / xTickCount) * pw;
-    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#484f58" font-size="10">${fmtTick(val)}</text>`;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${fmtTick(val)}</text>`;
   }
 
-  svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#30363d" stroke-width="1"/>`;
-  svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#3fb950" opacity="0.7"/>`;
-  svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">GPT-5</text>`;
-  svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#a371f7" opacity="0.7"/>`;
-  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">CS4.5</text>`;
+  svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#333" stroke-width="1"/>`;
+  svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
+  svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5</text>`;
+  svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
+  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">CS4.5</text>`;
   svg += '</svg>';
   return `<div class="fig-box"><h4>${title}</h4>${svg}</div>`;
 }
@@ -465,6 +467,6 @@ document.getElementById('f-outcome').addEventListener('change', applyFilters);
 document.getElementById('f-repo').addEventListener('change', applyFilters);
 applyFilters();
 </script>
-<p class="muted" style="max-width:880px;margin:24px auto 0">See also: <a href="unsubmitted.html">Unsubmitted tasks report</a> &mdash; instances where one or both models failed to submit a patch.</p>
+<p style="max-width:720px;margin:32px auto 0;color:#555;font-size:13px;">See also: <a href="unsubmitted.html">Unsubmitted tasks report</a> &mdash; instances where one or both models failed to submit a patch.</p>
 </body>
 </html>
