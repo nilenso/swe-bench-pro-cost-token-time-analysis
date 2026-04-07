@@ -61,45 +61,58 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <title>SWE-Bench Pro: GPT-5 vs Claude Sonnet 4.5</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; font-size: 13px; background: #0d1117; color: #c9d1d9; padding: 24px; line-height: 1.5; }
-h1 { font-size: 18px; color: #f0f6fc; margin-bottom: 4px; }
-h2 { font-size: 14px; color: #8b949e; font-weight: normal; margin-bottom: 20px; }
-h3 { font-size: 14px; color: #f0f6fc; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
+body { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; font-size: 13px; background: #0d1117; color: #c9d1d9; padding: 24px; line-height: 1.6; }
+.wrap { max-width: 880px; margin: 0 auto; }
+h1 { font-size: 20px; color: #f0f6fc; margin-bottom: 4px; }
+h2 { font-size: 14px; color: #8b949e; font-weight: normal; margin-bottom: 16px; }
+h3 { font-size: 15px; color: #f0f6fc; margin: 32px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #21262d; }
+p { margin: 8px 0; color: #c9d1d9; }
+.prose { color: #8b949e; font-size: 13px; line-height: 1.6; margin: 8px 0 16px; }
 
-.filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; padding: 12px; background: #161b22; border: 1px solid #21262d; border-radius: 6px; align-items: center; }
+.filters { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; padding: 12px; background: #161b22; border: 1px solid #21262d; border-radius: 6px; align-items: center; }
 .filter-group { display: flex; align-items: center; gap: 6px; }
 .filter-group label { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 select { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px 8px; font-family: inherit; font-size: 13px; }
 .count-badge { background: #21262d; color: #8b949e; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 
-table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
 th, td { text-align: right; padding: 4px 12px; border-bottom: 1px solid #21262d; white-space: nowrap; }
-td:first-child { white-space: normal; max-width: 420px; }
+td:first-child { white-space: normal; max-width: 380px; }
 th { color: #8b949e; font-weight: normal; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 td:first-child, th:first-child { text-align: left; }
 tr:hover td { background: #161b22; }
-.section { margin-bottom: 32px; }
-.ratio { color: #8b949e; font-size: 12px; }
+.section { margin-bottom: 36px; }
+.ratio { color: #484f58; font-size: 12px; }
 .highlight-g { color: #3fb950; }
 .highlight-c { color: #a371f7; }
 .muted { color: #484f58; }
-.per-instance-table { max-height: 600px; overflow-y: auto; }
+.metric-desc { color: #484f58; font-size: 11px; font-weight: normal; font-style: italic; display: block; }
+
+.cost-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.cost-layout > table { flex: 1; min-width: 300px; }
+.cost-layout > .hist-box { flex: 1; min-width: 300px; }
+
+.fig { margin: 16px 0; }
+.fig-row { display: flex; gap: 24px; flex-wrap: wrap; }
+.fig-box { flex: 1; min-width: 380px; }
+.fig-box h4 { font-size: 12px; color: #8b949e; font-weight: normal; margin-bottom: 4px; }
+.fig-caption { color: #6e7681; font-size: 11px; font-style: italic; margin-top: 4px; line-height: 1.5; }
+
+.per-instance-table { max-height: 600px; overflow-y: auto; margin-top: 8px; }
 .per-instance-table table { font-size: 12px; }
 .per-instance-table th { position: sticky; top: 0; background: #0d1117; z-index: 1; }
-.per-instance-table td.inst-id { max-width: 400px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.per-instance-table td.inst-id { max-width: 350px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 .sort-btn { cursor: pointer; user-select: none; }
 .sort-btn:hover { color: #f0f6fc; }
 .sort-btn.active { color: #58a6ff; }
-.metric-desc { color: #484f58; font-size: 11px; font-weight: normal; font-style: italic; display: block; }
-.hist-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 8px 0 16px; }
-.hist-box { flex: 1; min-width: 500px; }
-.hist-box h4 { font-size: 12px; color: #8b949e; font-weight: normal; margin-bottom: 4px; }
+a { color: #58a6ff; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
 <h1>SWE-Bench Pro: GPT-5 vs Claude Sonnet 4.5</h1>
-<h2>Paired comparison — both models submitted a patch on the same task</h2>
+<h2>Paired comparison &mdash; both models submitted a patch on the same task</h2>
 
 <div class="filters">
   <div class="filter-group">
@@ -123,10 +136,11 @@ tr:hover td { background: #161b22; }
 
 <div id="report"></div>
 
+</div><!-- .wrap -->
+
 <script>
 const DATA = __DATA_PLACEHOLDER__;
 
-// Populate repo filter
 const repos = [...new Set(DATA.map(p => p.repo))].sort();
 const repoSel = document.getElementById('f-repo');
 repos.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; repoSel.appendChild(o); });
@@ -155,93 +169,11 @@ function fmt(n, dec) {
   if (n === Infinity || n === -Infinity || isNaN(n)) return '—';
   return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
-
 function fmtD(n) { return '$' + fmt(n, 2); }
-
 function ratio(a, b) {
   if (!b || b === 0) return '—';
   return (a / b).toFixed(1) + '×';
 }
-
-// ── Histogram renderer (SVG) ──────────────────────────────────────────
-function histogram(gVals, cVals, opts) {
-  opts = opts || {};
-  const title = opts.title || '';
-  const fmtTick = opts.fmtTick || (v => v.toFixed(0));
-  const W = opts.width || 560, H = opts.height || 240;
-  const PAD = {l: 55, r: 10, t: 5, b: 28};
-  const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
-  const nBins = opts.bins || 20;
-
-  const all = gVals.concat(cVals).filter(v => isFinite(v) && v > 0);
-  if (!all.length) return `<div class="hist-box"><h4>${title}</h4><span class="muted">No data</span></div>`;
-
-  // Log-scale bins: equal width in log space
-  const logAll = all.map(v => Math.log10(v));
-  const logLo = Math.min(...logAll), logHi = Math.max(...logAll);
-  const logRange = logHi - logLo || 1;
-  const logBinW = logRange / nBins;
-
-  function toBins(vals) {
-    const bins = new Array(nBins).fill(0);
-    vals.forEach(v => {
-      if (v <= 0) return;
-      let i = Math.floor((Math.log10(v) - logLo) / logBinW);
-      if (i >= nBins) i = nBins - 1;
-      if (i < 0) i = 0;
-      bins[i]++;
-    });
-    return bins;
-  }
-
-  const gBins = toBins(gVals);
-  const cBins = toBins(cVals);
-  const maxCount = Math.max(...gBins, ...cBins, 1);
-
-  const barW = pw / nBins;
-  let svg = `<svg width="${W}" height="${H}" style="display:block">`;
-
-  // Y axis ticks
-  const yTicks = [0, Math.round(maxCount / 2), maxCount];
-  yTicks.forEach(t => {
-    const y = PAD.t + ph - (t / maxCount) * ph;
-    svg += `<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + pw}" y2="${y}" stroke="#21262d" stroke-width="1"/>`;
-    svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#484f58" font-size="10">${t}</text>`;
-  });
-
-  // Bars — GPT-5 behind, Claude in front, both semi-transparent
-  for (let i = 0; i < nBins; i++) {
-    const x = PAD.l + i * barW;
-    const gh = (gBins[i] / maxCount) * ph;
-    const ch = (cBins[i] / maxCount) * ph;
-    if (gBins[i] > 0)
-      svg += `<rect x="${x}" y="${PAD.t + ph - gh}" width="${barW - 1}" height="${gh}" fill="#3fb950" opacity="0.5"/>`;
-    if (cBins[i] > 0)
-      svg += `<rect x="${x}" y="${PAD.t + ph - ch}" width="${barW - 1}" height="${ch}" fill="#a371f7" opacity="0.5"/>`;
-  }
-
-  // X axis ticks (log-spaced)
-  const xTickCount = Math.min(5, nBins);
-  for (let i = 0; i <= xTickCount; i++) {
-    const logVal = logLo + (logRange * i / xTickCount);
-    const val = Math.pow(10, logVal);
-    const x = PAD.l + (i / xTickCount) * pw;
-    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#484f58" font-size="10">${fmtTick(val)}</text>`;
-  }
-
-  // Baseline
-  svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#30363d" stroke-width="1"/>`;
-
-  // Legend
-  svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#3fb950" opacity="0.7"/>`;
-  svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">GPT-5</text>`;
-  svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#a371f7" opacity="0.7"/>`;
-  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">CS4.5</text>`;
-
-  svg += '</svg>';
-  return `<div class="hist-box"><h4>${title}</h4>${svg}</div>`;
-}
-
 function mean(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
 function median(arr) {
   if (!arr.length) return 0;
@@ -265,8 +197,78 @@ function aggRow(label, gVals, cVals, opts) {
   return `<tr><td>${label}${desc}</td><td class="highlight-g">${gStr}</td><td class="highlight-c">${cStr}</td><td class="ratio">${r}</td></tr>`;
 }
 
+// ── Histogram (SVG, log-scale x-axis) ──────────────────────────────
+function histogram(gVals, cVals, opts) {
+  opts = opts || {};
+  const title = opts.title || '';
+  const fmtTick = opts.fmtTick || (v => v.toFixed(0));
+  const W = opts.width || 420, H = opts.height || 200;
+  const PAD = {l: 55, r: 10, t: 5, b: 28};
+  const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
+  const nBins = opts.bins || 20;
+
+  const all = gVals.concat(cVals).filter(v => isFinite(v) && v > 0);
+  if (!all.length) return `<div class="fig-box"><h4>${title}</h4><span class="muted">No data</span></div>`;
+
+  const logAll = all.map(v => Math.log10(v));
+  const logLo = Math.min(...logAll), logHi = Math.max(...logAll);
+  const logRange = logHi - logLo || 1;
+  const logBinW = logRange / nBins;
+
+  function toBins(vals) {
+    const bins = new Array(nBins).fill(0);
+    vals.forEach(v => {
+      if (v <= 0) return;
+      let i = Math.floor((Math.log10(v) - logLo) / logBinW);
+      if (i >= nBins) i = nBins - 1;
+      if (i < 0) i = 0;
+      bins[i]++;
+    });
+    return bins;
+  }
+
+  const gBins = toBins(gVals);
+  const cBins = toBins(cVals);
+  const maxCount = Math.max(...gBins, ...cBins, 1);
+  const barW = pw / nBins;
+  let svg = `<svg width="${W}" height="${H}" style="display:block;max-width:100%">`;
+
+  const yTicks = [0, Math.round(maxCount / 2), maxCount];
+  yTicks.forEach(t => {
+    const y = PAD.t + ph - (t / maxCount) * ph;
+    svg += `<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + pw}" y2="${y}" stroke="#21262d" stroke-width="1"/>`;
+    svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#484f58" font-size="10">${t}</text>`;
+  });
+
+  for (let i = 0; i < nBins; i++) {
+    const x = PAD.l + i * barW;
+    const gh = (gBins[i] / maxCount) * ph;
+    const ch = (cBins[i] / maxCount) * ph;
+    if (gBins[i] > 0)
+      svg += `<rect x="${x}" y="${PAD.t + ph - gh}" width="${barW - 1}" height="${gh}" fill="#3fb950" opacity="0.5"/>`;
+    if (cBins[i] > 0)
+      svg += `<rect x="${x}" y="${PAD.t + ph - ch}" width="${barW - 1}" height="${ch}" fill="#a371f7" opacity="0.5"/>`;
+  }
+
+  const xTickCount = Math.min(5, nBins);
+  for (let i = 0; i <= xTickCount; i++) {
+    const logVal = logLo + (logRange * i / xTickCount);
+    const val = Math.pow(10, logVal);
+    const x = PAD.l + (i / xTickCount) * pw;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#484f58" font-size="10">${fmtTick(val)}</text>`;
+  }
+
+  svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#30363d" stroke-width="1"/>`;
+  svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#3fb950" opacity="0.7"/>`;
+  svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">GPT-5</text>`;
+  svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#a371f7" opacity="0.7"/>`;
+  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#8b949e" font-size="9">CS4.5</text>`;
+  svg += '</svg>';
+  return `<div class="fig-box"><h4>${title}</h4>${svg}</div>`;
+}
+
 let sortCol = 'gpt5_cost';
-let sortDir = 1; // 1 = asc, -1 = desc
+let sortDir = 1;
 let currentFiltered = [];
 
 function render(filtered) {
@@ -280,32 +282,161 @@ function render(filtered) {
   const c = filtered.map(p => p.claude);
   const n = filtered.length;
 
-  // Outcome counts
   const nBoth = filtered.filter(p => outcomeOf(p) === 'both').length;
   const nGOnly = filtered.filter(p => outcomeOf(p) === 'gpt5-only').length;
   const nCOnly = filtered.filter(p => outcomeOf(p) === 'claude-only').length;
   const nNeither = filtered.filter(p => outcomeOf(p) === 'neither').length;
   const gResolved = nBoth + nGOnly;
   const cResolved = nBoth + nCOnly;
-
-  // Repo counts
   const repoCounts = {};
   filtered.forEach(p => { repoCounts[p.repo] = (repoCounts[p.repo] || 0) + 1; });
+  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Claude Sonnet 4.5</th><th>C/G</th></tr>';
 
   let html = '';
 
-  // OUTCOME
-  html += '<div class="section"><h3>Outcome</h3><table>';
-  html += '<tr><th style="text-align:left">Category</th><th>Count</th><th>% of filtered</th></tr>';
-  html += `<tr><td>Both resolved</td><td>${nBoth}</td><td>${pct(nBoth, n)}</td></tr>`;
-  html += `<tr><td>Only GPT-5 resolved</td><td>${nGOnly}</td><td>${pct(nGOnly, n)}</td></tr>`;
-  html += `<tr><td>Only Claude Sonnet 4.5 resolved</td><td>${nCOnly}</td><td>${pct(nCOnly, n)}</td></tr>`;
-  html += `<tr><td>Neither resolved</td><td>${nNeither}</td><td>${pct(nNeither, n)}</td></tr>`;
-  html += `<tr><td><b>GPT-5 resolve rate</b></td><td><b>${gResolved}/${n}</b></td><td><b>${pct(gResolved, n)}</b></td></tr>`;
-  html += `<tr><td><b>Claude Sonnet 4.5 resolve rate</b></td><td><b>${cResolved}/${n}</b></td><td><b>${pct(cResolved, n)}</b></td></tr>`;
-  html += '</table></div>';
+  // ── OUTCOME ──────────────────────────────────────────────────────
+  html += '<div class="section"><h3>Outcome</h3>';
+  html += `<p class="prose">${n} instances where both models submitted a patch on the same task. GPT-5 resolved ${gResolved} (${pct(gResolved,n)}), Claude Sonnet 4.5 resolved ${cResolved} (${pct(cResolved,n)}). Both solved ${nBoth}, only GPT-5 solved ${nGOnly}, only Claude ${nCOnly}, neither solved ${nNeither}.</p>`;
+  html += '</div>';
 
-  // REPOS
+  // ── Shared data arrays ───────────────────────────────────────────
+  const gCost = g.map(s => s.model_stats.instance_cost);
+  const cCost = c.map(s => s.model_stats.instance_cost);
+  const gIn = g.map(s => s.model_stats.tokens_sent);
+  const cIn = c.map(s => s.model_stats.tokens_sent);
+  const gOut = g.map(s => s.output_tokens.total);
+  const cOut = c.map(s => s.output_tokens.total);
+  const gCalls = g.map(s => s.model_stats.api_calls);
+  const cCalls = c.map(s => s.model_stats.api_calls);
+  const gTpc = g.map(s => s.tokens_per_call);
+  const cTpc = c.map(s => s.tokens_per_call);
+  const gOutC = g.map(s => s.output_tokens.content);
+  const cOutC = c.map(s => s.output_tokens.content);
+  const gOutT = g.map(s => s.output_tokens.tool_call_args);
+  const cOutT = c.map(s => s.output_tokens.tool_call_args);
+  const gTT = g.map(s => s.tool_time.total_seconds);
+  const cTT = c.map(s => s.tool_time.total_seconds);
+  const gMS = g.map(s => s.tool_time.max_seconds);
+  const cMS = c.map(s => s.tool_time.max_seconds);
+  const gO10 = sum(g.map(s => s.tool_time.steps_over_10s));
+  const cO10 = sum(c.map(s => s.tool_time.steps_over_10s));
+  const gSt = g.map(s => s.steps);
+  const cSt = c.map(s => s.steps);
+  const gPat = g.map(s => s.patch_chars);
+  const cPat = c.map(s => s.patch_chars);
+  const gPatTok = g.map(s => s.patch_tokens);
+  const cPatTok = c.map(s => s.patch_tokens);
+
+  const gCPR = gResolved ? sum(gCost) / gResolved : Infinity;
+  const cCPR = cResolved ? sum(cCost) / cResolved : Infinity;
+  const gMoreExp = filtered.filter((p, i) => gCost[i] > cCost[i]).length;
+
+  // ── COST ─────────────────────────────────────────────────────────
+  html += '<div class="section"><h3>Cost</h3>';
+  html += `<p class="prose">Each task has an API cost reported by litellm — the total bill for input tokens, output tokens, and any hidden reasoning. These costs reflect Scale AI's internal proxy pricing, not public list prices. At list prices the ratio would differ because GPT-5 sends more input tokens at a lower per-token rate.</p>`;
+
+  html += '<div class="cost-layout">';
+  html += '<table>' + hdr;
+  html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task.'});
+  html += aggRow('Median', gCost, cCost, {fn: median, dollar: true, desc: 'Middle value — less affected by outliers.'});
+  html += aggRow('Total', gCost, cCost, {fn: sum, dollar: true});
+  html += `<tr><td>Cost per resolve<span class="metric-desc">Total spend ÷ tasks fixed.</span></td><td class="highlight-g">${fmtD(gCPR)}</td><td class="highlight-c">${fmtD(cCPR)}</td><td class="ratio">${ratio(cCPR, gCPR)}</td></tr>`;
+  html += `<tr><td>GPT-5 more expensive</td><td colspan="3" class="muted">${gMoreExp}/${n} instances</td></tr>`;
+  html += '</table>';
+  html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
+  html += '</div>';
+
+  html += '</div>';
+
+  // ── TOKENS ───────────────────────────────────────────────────────
+  html += '<div class="section"><h3>Tokens</h3>';
+
+  // Histograms first
+  html += '<div class="fig"><div class="fig-row">';
+  html += histogram(gIn, cIn, {title: 'Input tokens per instance', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
+  html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
+  html += '</div>';
+  html += `<p class="fig-caption"><b>Figure: Token distributions per instance.</b> Left: total input tokens sent across all API calls (conversation history accumulates each turn — like context window usage in Claude Code). Right: visible output tokens the model produced (response text + tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included here. X-axis is log-scaled.</p>`;
+  html += '</div>';
+
+  // Prose
+  const inRat = mean(gIn) / mean(cIn);
+  const outRat = mean(cOut) / mean(gOut);
+  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Claude Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Claude produces ${fmt(outRat,1)}× more visible output tokens — primarily in tool call arguments (file edits, shell commands). Claude's output is dominated by file creation: it creates ${fmt(mean(g.map(s=>s.actions.create)),1)} vs ${fmt(mean(c.map(s=>s.actions.create)),1)} files per task, many of which are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
+
+  // Patch
+  html += `<p class="prose">The submitted patches themselves are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Claude Sonnet 4.5) on average — a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio, much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
+
+  // Table
+  html += '<table>' + hdr;
+  html += aggRow('Input tokens (mean)', gIn, cIn, {desc: 'Total tokens sent across all API calls. Grows each step as conversation history accumulates.'});
+  html += aggRow('Output tokens (mean)', gOut, cOut, {desc: 'Response text + tool call arguments, via tiktoken. GPT-5 hidden reasoning not included.'});
+  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'Text portion of the response — explanations, reasoning shown to user.'});
+  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools — file edits, shell commands, search queries.'});
+  html += aggRow('Patch size (tokens)', gPatTok, cPatTok, {desc: 'Tiktoken count of the final submitted diff.'});
+  html += aggRow('Patch size (chars)', gPat, cPat, {desc: 'Character count of the submitted diff.'});
+  const g1m = sum(gIn) > 0 ? sum(gCost) / sum(gIn) * 1e6 : 0;
+  const c1m = sum(cIn) > 0 ? sum(cCost) / sum(cIn) * 1e6 : 0;
+  html += `<tr><td>$/1M input tokens<span class="metric-desc">Effective rate per million input tokens.</span></td><td class="highlight-g">${fmtD(g1m)}</td><td class="highlight-c">${fmtD(c1m)}</td><td class="ratio">${ratio(c1m, g1m)}</td></tr>`;
+  html += '</table>';
+
+  // Patch histogram
+  html += '<div class="fig"><div class="fig-row">';
+  html += histogram(gPatTok, cPatTok, {title: 'Patch size (tokens)', fmtTick: v => (v/1e3).toFixed(1) + 'K'});
+  html += '</div>';
+  html += `<p class="fig-caption"><b>Figure: Patch size distribution.</b> Tiktoken count of the final submitted diff. Larger patches are not necessarily better — they may include unnecessary changes.</p>`;
+  html += '</div>';
+
+  html += '</div>';
+
+  // ── EXECUTION TIME ───────────────────────────────────────────────
+  html += '<div class="section"><h3>Execution</h3>';
+
+  // Histograms first
+  html += '<div class="fig"><div class="fig-row">';
+  html += histogram(gTT, cTT, {title: 'Tool time per instance (s)', fmtTick: v => v.toFixed(0) + 's'});
+  html += histogram(gSt, cSt, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
+  html += '</div>';
+  html += `<p class="fig-caption"><b>Figure: Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites) — like the "running bash…" wait in Claude Code. This does not include model inference time, which is not recorded in this dataset. Right: number of agent steps (each step = one model turn → tool execution cycle). X-axis is log-scaled.</p>`;
+  html += '</div>';
+
+  // Prose
+  const stRat = mean(cSt) / mean(gSt);
+  html += `<p class="prose">Claude Sonnet 4.5 takes ${fmt(stRat,1)}× more steps per task (${fmt(mean(cSt),0)} vs ${fmt(mean(gSt),0)}), making ${fmt(mean(cCalls),0)} API calls compared to GPT-5's ${fmt(mean(gCalls),0)}. GPT-5 carries more context per call (${fmt(mean(gTpc),0)} tokens/call vs ${fmt(mean(cTpc),0)}). Tool execution time is comparable at ${fmt(mean(gTT),0)}s (GPT-5) vs ${fmt(mean(cTT),0)}s (Claude), though Claude triggers ${fmt(cO10,0)} tool calls over 10 seconds compared to GPT-5's ${fmt(gO10,0)}.</p>`;
+
+  html += `<p class="prose">Note: wall-clock time and model inference latency are not recorded anywhere in this dataset. The times shown are tool execution only — the time the agent spends waiting for shell commands, file operations, and test suites to complete.</p>`;
+
+  // Table
+  html += '<table>' + hdr;
+  html += aggRow('API calls (mean)', gCalls, cCalls, {desc: 'Number of model roundtrips per task.'});
+  html += aggRow('Tokens/call (mean)', gTpc, cTpc, {desc: 'Average context size per call. Higher means the model carries more history each turn.'});
+  html += aggRow('Mean steps', gSt, cSt, {desc: 'Total model turns per task.'});
+  html += aggRow('Tool time — mean total (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task.'});
+  html += aggRow('Tool time — median total (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Less skewed by tasks with long test suites.'});
+  html += aggRow('Tool time — mean max step (s)', gMS, cMS, {dec: 1, desc: 'The single longest tool call in each task, averaged.'});
+  html += `<tr><td>Steps &gt;10s (total)<span class="metric-desc">Tool calls that took over 10 seconds.</span></td><td class="highlight-g">${gO10}</td><td class="highlight-c">${cO10}</td><td class="ratio">${ratio(cO10, gO10)}</td></tr>`;
+  html += '</table>';
+
+  // Actions breakdown
+  const aKeys = ['bash', 'view', 'edit', 'create', 'search_find', 'submit', 'other'];
+  const aDescs = {
+    bash: 'Shell commands — running tests, installing deps, checking output.',
+    view: 'Reading file contents.',
+    edit: 'Modifying existing files.',
+    create: 'Creating new files from scratch.',
+    search_find: 'find/grep to locate relevant files.',
+    submit: 'Final patch submission.',
+    other: 'Unclassified actions.',
+  };
+  html += '<h4 style="font-size:13px;color:#8b949e;margin:16px 0 4px">Actions per step</h4>';
+  html += '<table>' + hdr;
+  aKeys.forEach(k => {
+    html += aggRow(k, g.map(s => s.actions[k]), c.map(s => s.actions[k]), {dec: 1, desc: aDescs[k]});
+  });
+  html += '</table>';
+  html += '</div>';
+
+  // ── REPOS ────────────────────────────────────────────────────────
   html += '<div class="section"><h3>Repos</h3><table>';
   html += '<tr><th style="text-align:left">Repo</th><th>Instances</th><th>GPT-5 resolved</th><th>Claude Sonnet 4.5 resolved</th></tr>';
   Object.keys(repoCounts).sort().forEach(repo => {
@@ -316,128 +447,7 @@ function render(filtered) {
   });
   html += '</table></div>';
 
-  // Helper to extract arrays
-  const gCost = g.map(s => s.model_stats.instance_cost);
-  const cCost = c.map(s => s.model_stats.instance_cost);
-  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Claude Sonnet 4.5</th><th>Ratio C/G</th></tr>';
-
-  // COST
-  html += '<div class="section"><h3>Cost</h3><table>' + hdr;
-  html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task. What you\'d see on your bill for one coding task.'});
-  html += aggRow('Median', gCost, cCost, {fn: median, dollar: true, desc: 'Middle value — less affected by expensive outlier tasks than the mean.'});
-  html += aggRow('Total', gCost, cCost, {fn: sum, dollar: true, desc: 'Sum across all filtered tasks.'});
-  const gCPR = gResolved ? sum(gCost) / gResolved : Infinity;
-  const cCPR = cResolved ? sum(cCost) / cResolved : Infinity;
-  html += `<tr><td>Cost per resolve<span class="metric-desc">Total spend ÷ tasks actually fixed. The real price of a successful fix.</span></td><td class="highlight-g">${fmtD(gCPR)}</td><td class="highlight-c">${fmtD(cCPR)}</td><td class="ratio">${gCPR > 0 ? ratio(cCPR, gCPR) : '—'}</td></tr>`;
-  const gMoreExpensive = filtered.filter((p, i) => gCost[i] > cCost[i]).length;
-  html += `<tr><td>GPT-5 more expensive</td><td colspan="3" class="muted">${gMoreExpensive}/${n} instances</td></tr>`;
-  html += `<tr><td>Claude Sonnet 4.5 more expensive</td><td colspan="3" class="muted">${n - gMoreExpensive}/${n} instances</td></tr>`;
-  html += '</table>';
-  html += '<p style="color:#484f58; font-size:11px; font-style:italic; padding:4px 12px;">Costs reflect Scale AI\'s internal litellm pricing, not public list prices.</p>';
-  html += '<div class="hist-row">';
-  html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
-  html += '</div>';
-  html += '</div>';
-
-  // TOKENS
-  const gIn = g.map(s => s.model_stats.tokens_sent);
-  const cIn = c.map(s => s.model_stats.tokens_sent);
-  const gCalls = g.map(s => s.model_stats.api_calls);
-  const cCalls = c.map(s => s.model_stats.api_calls);
-  const gTpc = g.map(s => s.tokens_per_call);
-  const cTpc = c.map(s => s.tokens_per_call);
-  const gOut = g.map(s => s.output_tokens.total);
-  const cOut = c.map(s => s.output_tokens.total);
-  const gOutC = g.map(s => s.output_tokens.content);
-  const cOutC = c.map(s => s.output_tokens.content);
-  const gOutT = g.map(s => s.output_tokens.tool_call_args);
-  const cOutT = c.map(s => s.output_tokens.tool_call_args);
-
-  html += '<div class="section"><h3>Tokens</h3><table>' + hdr;
-  html += aggRow('Input tokens (mean)', gIn, cIn, {desc: 'Total tokens sent to the model across all API calls. Grows each step as conversation history accumulates — like context window usage in Claude Code.'});
-  html += aggRow('API calls (mean)', gCalls, cCalls, {desc: 'Number of model roundtrips. Each call = one prompt + one response.'});
-  html += aggRow('Tokens/call (mean)', gTpc, cTpc, {desc: 'Average context size per call. Higher means the model carries more history each turn.'});
-  html += aggRow('Output tokens (mean)', gOut, cOut, {desc: 'What the model wrote back — response text + tool call arguments, counted via tiktoken. GPT-5\'s hidden reasoning tokens are billed but not visible here.'});
-  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'The text portion of the response — explanations, reasoning shown to user.'});
-  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools — file edits, shell commands, search queries. The actual "work" output.'});
-  const g1m = sum(gIn) > 0 ? sum(gCost) / sum(gIn) * 1e6 : 0;
-  const c1m = sum(cIn) > 0 ? sum(cCost) / sum(cIn) * 1e6 : 0;
-  html += `<tr><td>$/1M input tokens<span class="metric-desc">Effective rate per million input tokens. Derived from total cost ÷ total input tokens.</span></td><td class="highlight-g">${fmtD(g1m)}</td><td class="highlight-c">${fmtD(c1m)}</td><td class="ratio">${ratio(c1m, g1m)}</td></tr>`;
-  html += '</table>';
-  html += '<div class="hist-row">';
-  html += histogram(gIn, cIn, {title: 'Input tokens per instance', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
-  html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
-  html += '</div>';
-  html += '</div>';
-
-  // TOOL EXECUTION TIME
-  const gTT = g.map(s => s.tool_time.total_seconds);
-  const cTT = c.map(s => s.tool_time.total_seconds);
-  const gMS = g.map(s => s.tool_time.max_seconds);
-  const cMS = c.map(s => s.tool_time.max_seconds);
-  const gO10 = sum(g.map(s => s.tool_time.steps_over_10s));
-  const cO10 = sum(c.map(s => s.tool_time.steps_over_10s));
-
-  html += '<div class="section"><h3>Tool Execution Time</h3><table>' + hdr;
-  html += aggRow('Mean total (s)', gTT, cTT, {dec: 1, desc: 'Total seconds waiting for tools per task. Like the "running bash…" spinner in Claude Code. Does not include model thinking time — that\'s not recorded.'});
-  html += aggRow('Median total (s)', gTT, cTT, {fn: median, dec: 1, desc: 'Middle value — less skewed by tasks with long test suites or recursive greps.'});
-  html += aggRow('Mean max step (s)', gMS, cMS, {dec: 1, desc: 'The single longest tool call in each task, averaged. Usually a full test suite run.'});
-  html += `<tr><td>Steps &gt;10s (total)<span class="metric-desc">Tool calls that took over 10 seconds. Typically test runs or broad file searches.</span></td><td class="highlight-g">${gO10}</td><td class="highlight-c">${cO10}</td><td class="ratio">${ratio(cO10, gO10)}</td></tr>`;
-  html += '</table>';
-  html += '<div class="hist-row">';
-  const gSt_ = g.map(s => s.steps);
-  const cSt_ = c.map(s => s.steps);
-  html += histogram(gTT, cTT, {title: 'Tool time per instance (s)', fmtTick: v => v.toFixed(0) + 's'});
-  html += histogram(gSt_, cSt_, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
-  html += '</div>';
-  html += '</div>';
-
-  // STEPS & ACTIONS
-  const gSt = g.map(s => s.steps);
-  const cSt = c.map(s => s.steps);
-  const aKeys = ['bash', 'view', 'edit', 'create', 'search_find', 'submit', 'other'];
-
-  html += '<div class="section"><h3>Steps &amp; Actions</h3><table>' + hdr;
-  html += aggRow('Mean steps', gSt, cSt, {desc: 'Total model turns per task. Each step = one prompt → response → tool execution cycle.'});
-  const aDescs = {
-    bash: 'Shell commands — running tests, installing deps, checking output.',
-    view: 'Reading file contents. Like opening a file in your editor.',
-    edit: 'Modifying existing files — str_replace, insert.',
-    create: 'Creating new files from scratch.',
-    search_find: 'find/grep to locate relevant files before reading them.',
-    submit: 'Final patch submission — the agent says "I\'m done."',
-    other: 'Unclassified actions.',
-  };
-  aKeys.forEach(k => {
-    html += aggRow('&nbsp;&nbsp;' + k, g.map(s => s.actions[k]), c.map(s => s.actions[k]), {dec: 1, desc: aDescs[k]});
-  });
-  html += '</table></div>';
-
-  // CONTENT VOLUME
-  const gObs = g.map(s => s.content.observation_chars);
-  const cObs = c.map(s => s.content.observation_chars);
-  const gAct = g.map(s => s.content.action_chars);
-  const cAct = c.map(s => s.content.action_chars);
-  const gTht = g.map(s => s.content.thought_chars);
-  const cTht = c.map(s => s.content.thought_chars);
-  const gPat = g.map(s => s.patch_chars);
-  const cPat = c.map(s => s.patch_chars);
-
-  html += '<div class="section"><h3>Content Volume (mean chars/instance)</h3><table>' + hdr;
-  html += aggRow('Observations (in)', gObs, cObs, {desc: 'Tool output the model consumed — file contents, command stdout, test results.'});
-  html += aggRow('Actions (out)', gAct, cAct, {desc: 'What the model asked tools to do — shell commands, edit instructions, file paths.'});
-  html += aggRow('Thoughts (out)', gTht, cTht, {desc: 'Visible reasoning text. Not all thinking is visible — GPT-5 uses hidden chain-of-thought.'});
-  html += aggRow('Patch size (chars)', gPat, cPat, {desc: 'Size of the final submitted diff. Larger patches aren\'t necessarily better — could mean unnecessary changes.'});
-  const gPatTok = g.map(s => s.patch_tokens);
-  const cPatTok = c.map(s => s.patch_tokens);
-  html += aggRow('Patch size (tokens)', gPatTok, cPatTok, {desc: 'Tiktoken count of the submitted diff. Direct measure of how much code the model changed.'});
-  html += '</table>';
-  html += '<div class="hist-row">';
-  html += histogram(gPatTok, cPatTok, {title: 'Patch size (tokens)', fmtTick: v => (v/1e3).toFixed(1) + 'K'});
-  html += '</div>';
-  html += '</div>';
-
-  // PER-INSTANCE TABLE
+  // ── PER-INSTANCE TABLE ───────────────────────────────────────────
   const cols = [
     { key: 'instance_id', label: 'Instance', sortFn: (p) => p.instance_id },
     { key: 'repo', label: 'Repo', sortFn: (p) => p.repo },
@@ -454,7 +464,6 @@ function render(filtered) {
     { key: 'claude_patch', label: 'Patch CS4.5', sortFn: (p) => p.claude.patch_chars },
   ];
 
-  // Sort
   const colDef = cols.find(c => c.key === sortCol) || cols[3];
   const sorted = [...filtered].sort((a, b) => {
     const va = colDef.sortFn(a);
@@ -497,7 +506,6 @@ function render(filtered) {
 
   document.getElementById('report').innerHTML = html;
 
-  // Attach sort handlers
   document.querySelectorAll('.sort-btn').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.col;
@@ -512,7 +520,7 @@ document.getElementById('f-outcome').addEventListener('change', applyFilters);
 document.getElementById('f-repo').addEventListener('change', applyFilters);
 applyFilters();
 </script>
-<p class="muted" style="margin-top:24px">See also: <a href="unsubmitted.html" style="color:#58a6ff">Unsubmitted tasks report</a> — instances where one or both models failed to submit a patch.</p>
+<p class="muted" style="max-width:880px;margin:24px auto 0">See also: <a href="unsubmitted.html">Unsubmitted tasks report</a> &mdash; instances where one or both models failed to submit a patch.</p>
 </body>
 </html>
 """
@@ -529,7 +537,6 @@ def main():
 
     pairs = pair_instances(data)
 
-    # Slim down the data — drop fields we don't need in the HTML to keep file small
     slim_pairs = []
     keep_keys = [
         'instance_id', 'repo', 'resolved', 'submitted', 'steps', 'patch_chars', 'patch_tokens',
@@ -543,7 +550,6 @@ def main():
         slim_pairs.append(sp)
 
     json_data = orjson.dumps(slim_pairs).decode('utf-8')
-
     html = HTML_TEMPLATE.replace('__DATA_PLACEHOLDER__', json_data)
 
     with open(args.output, 'w') as f:
