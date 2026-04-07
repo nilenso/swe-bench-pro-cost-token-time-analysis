@@ -117,7 +117,9 @@ a:hover { text-decoration: underline; }
 <h2>Cost, tokens, and execution time from the publicly available trajectory data</h2>
 
 <div class="section">
-<p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates. It does not report what those fixes cost in tokens, dollars, or time. The raw trajectory data is publicly available in an <a href="https://github.com/scaleapi/SWE-bench_Pro-os">S3 bucket</a>, but we could not find anyone who has analyzed the operational metrics.</p>
+<p>If you use coding agents in your daily work, you have a feel for what they cost. A task that takes 10 minutes and a million tokens. A refactor that burns through $5 before you realize it went down the wrong path. You develop intuitions, but you rarely get to see the data across hundreds of real tasks, for two different models, under identical conditions.</p>
+
+<p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates but not what those results cost in tokens, dollars, or time. The raw trajectory data is <a href="https://github.com/scaleapi/SWE-bench_Pro-os">publicly available</a>, and we wanted to look at the operational metrics.</p>
 
 <p>We downloaded all 1,460 trajectory files (~23 GB) for the GPT-5 and Sonnet 4.5 runs. We extracted per-instance cost, token counts, tool execution time, and action breakdowns, then paired them for direct comparison.</p>
 
