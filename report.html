@@ -39,7 +39,7 @@ tr:hover td { background: #1e1e1e; }
 
 .fig { margin: 20px 0; }
 .fig-row { display: flex; gap: 24px; flex-wrap: wrap; }
-.fig-box { flex: 1; min-width: 320px; }
+.fig-box { flex: 1; min-width: 280px; overflow: hidden; }
 .fig-box h4 { font-size: 12px; color: #777; font-weight: 500; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
 .fig-caption { color: #666; font-size: 13px; margin-top: 8px; line-height: 1.6; }
 .fig-caption b { color: #999; font-weight: 500; }
@@ -149,7 +149,7 @@ function histogram(gVals, cVals, opts) {
   opts = opts || {};
   const title = opts.title || '';
   const fmtTick = opts.fmtTick || (v => v.toFixed(0));
-  const W = opts.width || 420, H = opts.height || 200;
+  const W = opts.width || 400, H = opts.height || 200;
   const PAD = {l: 55, r: 10, t: 5, b: 28};
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
   const nBins = opts.bins || 20;
@@ -178,7 +178,7 @@ function histogram(gVals, cVals, opts) {
   const cBins = toBins(cVals);
   const maxCount = Math.max(...gBins, ...cBins, 1);
   const barW = pw / nBins;
-  let svg = `<svg width="${W}" height="${H}" style="display:block;max-width:100%">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">`;
 
   const yTicks = [0, Math.round(maxCount / 2), maxCount];
   yTicks.forEach(t => {
