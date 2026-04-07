@@ -251,7 +251,8 @@ function render(filtered) {
 
   // ── OUTCOME ──────────────────────────────────────────────────────
   html += '<div class="section"><h3>Outcome</h3>';
-  html += `<p class="prose">${n} instances where both models submitted a patch on the same task. GPT-5 resolved ${gResolved} (${pct(gResolved,n)}), Sonnet 4.5 resolved ${cResolved} (${pct(cResolved,n)}). Both solved ${nBoth}, only GPT-5 solved ${nGOnly}, only Sonnet 4.5 solved ${nCOnly}, neither solved ${nNeither}.</p>`;
+  html += `<p class="prose">Resolve rates are close enough (GPT-5 ${pct(gResolved,n)}, Sonnet 4.5 ${pct(cResolved,n)}) that I wouldn't pick between them on accuracy alone. The more interesting differences are in how they spend resources to get there.</p>`;
+  html += `<p class="prose">${n} instances where both models submitted a patch on the same task. Both solved ${nBoth}, only GPT-5 solved ${nGOnly}, only Sonnet 4.5 solved ${nCOnly}, neither solved ${nNeither}.</p>`;
   html += '</div>';
 
   // ── Shared data arrays ───────────────────────────────────────────
