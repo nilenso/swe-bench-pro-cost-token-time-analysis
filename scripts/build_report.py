@@ -58,7 +58,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</title>
+<title>What SWE-Bench Pro trajectories say about cost and efficiency</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; background: #191919; color: #d4d4d4; padding: 32px 24px 64px; line-height: 1.7; }
@@ -113,7 +113,7 @@ a:hover { text-decoration: underline; }
 <body>
 <div class="wrap">
 
-<h1>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</h1>
+<h1>What SWE-Bench Pro trajectories say about cost and efficiency</h1>
 <h2>Cost, tokens, and execution time from the publicly available trajectory data</h2>
 
 <div class="section">
