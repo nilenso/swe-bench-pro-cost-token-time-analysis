@@ -310,38 +310,23 @@ function render(filtered) {
   // ── TOKENS ───────────────────────────────────────────────────────
   html += '<div class="section"><h3>Tokens</h3>';
 
-  // Histograms first
+  const inRat = mean(gIn) / mean(cIn);
+  const outRat = mean(cOut) / mean(gOut);
+
+  // Summary
+  html += `<p class="prose">Sonnet 4.5 produces ${fmt(outRat,1)}× more output tokens per task, mostly creating files it never submits.</p>`;
+
+  // Histograms
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gIn, cIn, {title: 'Input tokens per instance', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
   html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
   html += '</div>';
-  html += `<p class="fig-caption"><b>Token distributions per instance.</b> Left: total input tokens sent across all API calls. Conversation history accumulates each turn, so this grows with each step. Right: visible output tokens (response text plus tool call arguments, counted via tiktoken). GPT-5's hidden chain-of-thought reasoning tokens are billed but not included. X-axis is log-scaled.</p>`;
+  html += `<p class="fig-caption"><b>Token distributions per instance.</b> Left: total input tokens sent across all API calls. Conversation history accumulates each turn, so this grows with each step. Right: visible output tokens (response text plus tool call arguments). X-axis is log-scaled.</p>`;
   html += '</div>';
 
-  // Methodology note
-  html += `<p class="prose">Output token counts here are measured via tiktoken (cl100k_base) across <code>message.content</code>, <code>message.thought</code>, and <code>tool_calls[].function.arguments</code>. This is necessary because SWE-Agent's built-in <code>tokens_received</code> field has a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug</a>: it only counts <code>message.content</code> and misses tool call arguments, undercounting output tokens by 7-8x. GPT-5's hidden chain-of-thought reasoning tokens are billed but never appear in the response, so they are not included in these counts.</p>`;
-
-  // Prose
-  const inRat = mean(gIn) / mean(cIn);
-  const outRat = mean(cOut) / mean(gOut);
-  html += `<p class="prose">GPT-5 sends ${inRat > 1.05 ? fmt(inRat,1) + '× more' : inRat < 0.95 ? fmt(1/inRat,1) + '× fewer' : 'roughly the same'} input tokens per task compared to Sonnet 4.5, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. Sonnet 4.5 produces ${fmt(outRat,1)}× more visible output tokens, primarily in tool call arguments (file edits, shell commands).</p>`;
-  html += `<p class="prose">Sonnet 4.5's output is dominated by file creation: ${fmt(mean(c.map(s=>s.actions.create)),1)} new files per task vs GPT-5's ${fmt(mean(g.map(s=>s.actions.create)),1)}. Many of these are throwaway test and reproduction scripts that never appear in the final patch.</p>`;
-
-  // Patch
-  html += `<p class="prose">The submitted patches are ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Sonnet 4.5) on average, a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio. Much smaller than the ${fmt(outRat,1)}× gap in total output.</p>`;
-
-  // Table
-  html += '<table>' + hdr;
-  html += aggRow('Input tokens (mean)', gIn, cIn, {desc: 'Total tokens sent across all API calls. Grows each step as conversation history accumulates.'});
-  html += aggRow('Output tokens (mean)', gOut, cOut, {desc: 'Response text + tool call arguments, via tiktoken. GPT-5 hidden reasoning not included.'});
-  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'Text portion of the response. Explanations, reasoning shown to user.'});
-  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools: file edits, shell commands, search queries.'});
-  html += aggRow('Patch size (tokens)', gPatTok, cPatTok, {desc: 'Tiktoken count of the final submitted diff.'});
-  html += aggRow('Patch size (chars)', gPat, cPat, {desc: 'Character count of the submitted diff.'});
-  const g1m = sum(gIn) > 0 ? sum(gCost) / sum(gIn) * 1e6 : 0;
-  const c1m = sum(cIn) > 0 ? sum(cCost) / sum(cIn) * 1e6 : 0;
-  html += `<tr><td>$/1M input tokens<span class="metric-desc">Effective rate per million input tokens.</span></td><td class="highlight-g">${fmtD(g1m)}</td><td class="highlight-c">${fmtD(c1m)}</td><td class="ratio">${ratio(c1m, g1m)}</td></tr>`;
-  html += '</table>';
+  // Key contrast
+  html += `<p class="prose">Input tokens are ${inRat > 1.05 ? 'higher for GPT-5 (' + fmt(inRat,1) + '×)' : inRat < 0.95 ? 'higher for Sonnet 4.5 (' + fmt(1/inRat,1) + '×)' : 'similar between the two models'}, across ${fmt(mean(gCalls),0)} vs ${fmt(mean(cCalls),0)} API calls. The divergence is in output. Sonnet 4.5 produces ${fmt(outRat,1)}× more visible output tokens, primarily in tool call arguments (file edits, shell commands).</p>`;
+  html += `<p class="prose">Most of that gap comes from file creation. Sonnet 4.5 creates ${fmt(mean(c.map(s=>s.actions.create)),1)} new files per task to GPT-5's ${fmt(mean(g.map(s=>s.actions.create)),1)}. Many are throwaway test and reproduction scripts that never appear in the final patch. The submitted patches are actually close: ${fmt(mean(gPatTok),0)} tokens (GPT-5) vs ${fmt(mean(cPatTok),0)} tokens (Sonnet 4.5), a ${fmt(mean(cPatTok)/mean(gPatTok),1)}× ratio.</p>`;
 
   // Patch histogram
   html += '<div class="fig"><div class="fig-row">';
@@ -349,6 +334,18 @@ function render(filtered) {
   html += '</div>';
   html += `<p class="fig-caption"><b>Patch size distribution.</b> Tiktoken count of the final submitted diff. Larger patches are not necessarily better and may include unnecessary changes.</p>`;
   html += '</div>';
+
+  // Table
+  html += '<table>' + hdr;
+  html += aggRow('Input tokens (mean)', gIn, cIn, {desc: 'Total tokens sent across all API calls.'});
+  html += aggRow('Output tokens (mean)', gOut, cOut, {desc: 'Response text + tool call arguments, via tiktoken.'});
+  html += aggRow('&nbsp;&nbsp;content', gOutC, cOutC, {desc: 'Text portion of the response.'});
+  html += aggRow('&nbsp;&nbsp;tool_call args', gOutT, cOutT, {desc: 'Arguments passed to tools: file edits, shell commands, search queries.'});
+  html += aggRow('Patch size (tokens)', gPatTok, cPatTok, {desc: 'Tiktoken count of the final submitted diff.'});
+  html += '</table>';
+
+  // Methodology (end of section, for those who want it)
+  html += `<p class="fig-caption"><b>Methodology.</b> Output token counts are measured via tiktoken (cl100k_base) across <code>message.content</code>, <code>message.thought</code>, and <code>tool_calls[].function.arguments</code>. SWE-Agent's built-in <code>tokens_received</code> field has a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug</a> that only counts <code>message.content</code>, undercounting output tokens by 7-8x. GPT-5's hidden chain-of-thought reasoning tokens are billed but never appear in the response, so they are not included.</p>`;
 
   html += '</div>';
 
