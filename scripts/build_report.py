@@ -114,7 +114,17 @@ a:hover { text-decoration: underline; }
 <div class="wrap">
 
 <h1>SWE-Bench Pro: GPT-5 vs Sonnet 4.5</h1>
-<h2>Paired comparison &mdash; both models submitted a patch on the same task</h2>
+<h2>Cost, tokens, and execution time &mdash; the operational data the leaderboard doesn&rsquo;t show</h2>
+
+<div class="section">
+<p>The <a href="https://labs.scale.com/leaderboard/swe_bench_pro_public">SWE-Bench Pro leaderboard</a> reports resolve rates: which models fix which tasks. It does not report what those fixes cost in tokens, dollars, or time. The raw trajectory data is publicly available in an <a href="https://github.com/scaleapi/SWE-bench_Pro-os">S3 bucket</a>, but as far as we know, nobody has analyzed the operational metrics.</p>
+
+<p>This report does that. We downloaded all 1,460 trajectory files (~23 GB) for the GPT-5 and Sonnet 4.5 runs, extracted per-instance cost, token counts, tool execution time, and action breakdowns, and paired them for direct comparison.</p>
+
+<p>Both runs use identical conditions: <a href="https://github.com/SWE-agent/SWE-agent">SWE-Agent</a> v1.1.0 scaffold, same tools, same prompt, 250-turn limit, no cost limit, both dated October 13, 2025. GPT-5 runs with <code>reasoning_effort: high</code>. Sonnet 4.5 uses default settings. This is as close to apples-to-apples as exists for these two models on a real software engineering benchmark.</p>
+
+<p>A few caveats up front: costs reflect Scale AI&rsquo;s internal litellm proxy pricing, not public list prices &mdash; the dollar amounts are not generalizable. Output token counts are measured via tiktoken and do not include GPT-5&rsquo;s hidden chain-of-thought reasoning tokens, which are billed but never appear in the response. Wall-clock time and model inference latency are not recorded anywhere in this dataset; we only have tool execution time. We also found and worked around a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug in SWE-Agent</a> where <code>tokens_received</code> only counts <code>message.content</code> and misses tool call arguments, undercounting output tokens by 7&ndash;8&times;.</p>
+</div>
 
 <div class="filters">
   <div class="filter-group">
