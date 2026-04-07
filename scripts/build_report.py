@@ -343,6 +343,8 @@ function render(filtered) {
 
   // ── COST ─────────────────────────────────────────────────────────
   html += '<div class="section"><h3>Cost</h3>';
+  const costRat = mean(cCost) / mean(gCost);
+  html += `<p class="prose"><b>Our read:</b> GPT-5 is ${fmt(costRat,1)}× cheaper per task on this benchmark. Even accounting for pricing differences, the gap is large enough to matter in practice.</p>`;
   html += `<p class="prose">Each task has an API cost reported by litellm: the total bill for input tokens, output tokens, and any hidden reasoning. These costs reflect Scale AI's internal litellm proxy pricing, not public list prices. At list prices the ratio would differ because GPT-5 sends more input tokens at a lower per-token rate.</p>`;
   html += `<p class="prose">Your own costs will vary. Subscription tiers, prompt caching, Anthropic's caching cost policies, and volume discounts all shift the numbers. We're reporting what the benchmark recorded. The token volumes and ratios between models are more stable than the dollar amounts.</p>`;
 
