@@ -125,6 +125,8 @@ a:hover { text-decoration: underline; }
 
 <p>Both runs use identical conditions: <a href="https://github.com/SWE-agent/SWE-agent">SWE-Agent</a> v1.1.0 scaffold, same tools, same prompt, 250-turn limit, no cost limit, both dated October 13, 2025. GPT-5 runs with <code>reasoning_effort: high</code>. Sonnet 4.5 uses default settings.</p>
 
+<p>These are pre-November 2025 models. The coding agent landscape has <a href="https://simonwillison.net/2026/Jan/4/inflection/">changed significantly</a> since then. The data here is a snapshot of where things stood in October 2025, not where they are today.</p>
+
 <p>Costs here reflect Scale AI's internal litellm proxy pricing, not public list prices. The dollar amounts are not generalizable. Output token counts are measured via tiktoken and exclude GPT-5's hidden chain-of-thought reasoning tokens (billed but absent from the response). Wall-clock time and model inference latency are not recorded in this dataset. We only have tool execution time.</p>
 
 <p>We also found and worked around a <a href="https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/models.py#L761">bug in SWE-Agent</a> where <code>tokens_received</code> only counts <code>message.content</code> and misses tool call arguments, undercounting output tokens by 7-8x.</p>
