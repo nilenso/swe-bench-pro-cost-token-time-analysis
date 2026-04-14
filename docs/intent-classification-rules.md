@@ -271,3 +271,305 @@ function classify_step(action, observation):
 - `create-file` is the catch-all for created files that don't match any pattern.
   These are often new source files being added as part of the fix.
 - `bash-other` should be <2% of steps. If it's higher, inspect examples and add rules.
+
+## Implementation fixes applied (2026-04-13)
+
+Implemented in: `scripts/classify_intent.py`
+
+After running on random samples (30 Claude + 30 GPT trajectories) and manually checking
+step/action pairs against raw trajectory source, I fixed the following inconsistencies:
+
+1. **Malformed `bash -lc` unwrapping**
+   - **Issue:** Many actions looked like `bash -lc "..."}` (extra trailing brace from serialized tool calls), causing commands like `grep`/`sed`/`ls` to fall into `bash-other`.
+   - **Fix:** Added robust shell-wrapper stripping that handles normal quotes, `$'...'`, and malformed `"..."}` endings.
+   - **Why:** Restores the literal command so the intended rule can trigger.
+
+2. **False failed-intent matches from substring checks**
+   - **Issue:** `(failed)` routing used broad `contains("test")` / `contains("find")`, so paths like `/app/test/...` and python heredoc bodies could be misclassified.
+   - **Fix:** Failed routing now classifies from the **command head** (first line) using command-shape checks (`grep/find`, test-runner commands, python/node/go-run, read commands).
+   - **Why:** Keeps failure labels tied to actual attempted shell command type, not incidental substrings in paths/code.
+
+3. **Wrapper prefixes hiding real command type**
+   - **Issue:** Prefixes like `timeout 60 ...`, env assignments (`FOO=bar ...`), and `set -e...;` prevented matching of downstream command.
+   - **Fix:** Added normalization that strips common leading wrappers before intent matching.
+   - **Why:** Preserves literal intent while handling common shell scaffolding.
+
+4. **Git commands with `-C` not recognized**
+   - **Issue:** `git -C /app status|show|log|diff` went to `bash-other`.
+   - **Fix:** Added git subcommand extraction that skips git flags (including `-C`).
+   - **Why:** Correctly maps to `git-inspect` / `git-diff` / `git-stash`.
+
+5. **High `bash-other` from common verification/build invocations**
+   - **Issue:** Frequent `npx tsc`, type-check/build script calls, and named script runs via `go run`/`sh` were under-classified.
+   - **Fix:**
+     - classify `npx tsc` / `tsc` / local `tsc` binaries as `compile-build`
+     - classify `yarn test` as `run-test-suite`
+     - classify named scripts run via `go run`, `sh`, `bash`, `./script.sh` through existing repro/verify/custom filename rules
+   - **Why:** Reduces fallback noise and better matches observed literal command intent.
+
+### Validation snapshot after fixes
+
+- Random sample check: **30 Claude + 30 GPT** trajectories
+  - Claude sample: `bash-other` = **1.17%**
+  - GPT sample: `bash-other` = **0.89%**
+- Full dataset sanity check:
+  - Claude: `bash-other` = **1.64%**
+  - GPT: `bash-other` = **1.44%**
+
+This keeps fallback usage in the target range while preserving deterministic,
+command-literal classification.
+
+## Sequence-layer intents (deterministic, local-history)
+
+Implemented in: `scripts/classify_intent.py` (`--sequence-layer`)
+
+This is a **second pass** on top of base intents. It uses short, deterministic
+history (no model inference, no long-chain pattern matching) to capture iteration
+patterns such as re-testing/re-verifying.
+
+### Sequence labels
+
+- `seq-none` — no sequence-specific pattern detected
+- `seq-verify-after-edit` — a verify/test/build step after one or more edits since last verify
+- `seq-verify-rerun-no-edit` — another verify/test/build step with no intervening edit
+- `seq-verify-rerun-same-command` — same verify command repeated without edits
+- `seq-repro-after-edit` — repro/inline run after one or more edits since last repro
+- `seq-repro-rerun-no-edit` — another repro/inline run with no intervening edit
+- `seq-repro-rerun-same-command` — same repro command repeated without edits
+- `seq-reread-edited-file` — reading a file that was edited earlier in the same trajectory
+- `seq-edit-after-failed-verify` — edit immediately after failed verify/script run
+- `seq-diagnose-read-after-failed-verify` — read step immediately after failed verify/script run
+- `seq-diagnose-search-after-failed-verify` — search step immediately after failed verify/script run
+- `seq-submit-after-verify` — submit after at least one verify step has occurred
+
+### Sequence rules (pseudocode)
+
+```
+function classify_sequence_layer(trajectory, base_intents):
+    seen_verify = false
+    seen_repro = false
+    edited_since_verify = false
+    edited_since_repro = false
+    prev_verify_signature = ""
+    prev_repro_signature = ""
+    edited_paths = set()
+    prev_base = ""
+
+    for each step i:
+        base = base_intents[i]
+        signature = normalized_command_head(step.action)
+        seq = "seq-none"
+
+        if base in VERIFY_SET:
+            if seen_verify and not edited_since_verify and signature == prev_verify_signature:
+                seq = "seq-verify-rerun-same-command"
+            elif edited_since_verify:
+                seq = "seq-verify-after-edit"
+            elif seen_verify and not edited_since_verify:
+                seq = "seq-verify-rerun-no-edit"
+
+            seen_verify = true
+            edited_since_verify = false
+            prev_verify_signature = signature
+
+        elif base in REPRO_SET:
+            if seen_repro and not edited_since_repro and signature == prev_repro_signature:
+                seq = "seq-repro-rerun-same-command"
+            elif edited_since_repro:
+                seq = "seq-repro-after-edit"
+            elif seen_repro and not edited_since_repro:
+                seq = "seq-repro-rerun-no-edit"
+
+            seen_repro = true
+            edited_since_repro = false
+            prev_repro_signature = signature
+
+        elif base in EDIT_SET:
+            if prev_base in FAILED_VERIFY_SET:
+                seq = "seq-edit-after-failed-verify"
+
+            edited_since_verify = true
+            edited_since_repro = true
+            edited_paths.add(extract_path_if_any(step.action))
+
+        elif base in READ_SET:
+            if prev_base in FAILED_VERIFY_SET:
+                seq = "seq-diagnose-read-after-failed-verify"
+            elif extract_path_if_any(step.action) in edited_paths:
+                seq = "seq-reread-edited-file"
+
+        elif base in SEARCH_SET and prev_base in FAILED_VERIFY_SET:
+            seq = "seq-diagnose-search-after-failed-verify"
+
+        elif base == "submit" and seen_verify:
+            seq = "seq-submit-after-verify"
+
+        output seq
+        prev_base = base
+```
+
+### Manual verification + subset run
+
+I manually inspected sampled trajectories (30 Claude + 30 GPT) and validated
+sequence labels against raw action strings.
+
+Examples that matched well:
+- repeated `pytest`/`go test` runs after edits → `seq-verify-after-edit`
+- consecutive verify runs with no edits → `seq-verify-rerun-no-edit`
+- repeated `python /app/repro.py` with no edits → `seq-repro-rerun-same-command`
+- opening the same source file after editing it → `seq-reread-edited-file`
+
+Subset sanity:
+- sequence layer produced expected re-test/repro loops without requiring long
+  sequence templates
+- classification remains deterministic and local-history based
+
+## Verify outcome detection
+
+Implemented in: `scripts/classify_intent.py` (`classify_verify_outcome`)
+
+For verify-run intents (`run-test-suite`, `run-test-specific`, `run-verify-script`,
+`run-custom-script`, `compile-build`, `syntax-check`), the observation field is
+parsed for unambiguous pass/fail signals. Returns `'pass'`, `'fail'`, or `''`
+(unknown).
+
+### Parsed summary formats
+
+| Runner | Pass signal | Fail signal |
+|---|---|---|
+| pytest | `N passed ... in Xs` summary line | `N failed` or `N error` in summary line |
+| mocha | `N passing` | `N failing` (N > 0) |
+| go test | `ok  package` | `FAIL  package` or `--- FAIL:` |
+| jest | `Tests: N passed` | `Tests: N failed` |
+| compile (go build, go vet, make) | Empty/short output | Error text, non-zero exit |
+| syntax-check (py_compile) | No output or no error | `SyntaxError` |
+| syntax-check (node -c with && echo) | Echo text appears in output | Error before echo |
+| custom scripts | `N passed, 0 failed` summary | Traceback, throw/Error, non-zero exit |
+
+### Design constraints
+
+- Only classifies when the signal is **unambiguous from the observation text**.
+- Custom verify scripts (agent-created throwaway scripts) have variable output
+  formats. Only structured `N passed, M failed` summaries and clear error
+  signals (Traceback, throw) are detected. Everything else returns `''`.
+- The outcome is per-step, not per-test. A step where 80 tests pass and 1
+  fails is classified as `'fail'`.
+
+### Aggregate stats (2026-04-14)
+
+| | Claude 4.5 | GPT-5 |
+|---|---|---|
+| verify-pass | 5,271 | 111 |
+| verify-fail | 1,244 | 171 |
+| unknown | ~7,000 | ~1,000 |
+| pass rate (of detected) | 81% | 39% |
+
+GPT-5 rarely runs structured test suites (585 `run-test-suite` vs Claude's
+5,942), so most of its verify steps produce undetectable outcomes.
+
+## Sequence markers: first-all-pass and work-done
+
+Implemented in: `scripts/classify_intent.py` (`classify_sequence_layer` with
+`verify_outcomes` parameter)
+
+Two retrospective markers that use verify outcomes + source edit positions:
+
+### `seq-first-all-pass`
+
+The first verify step where:
+1. The outcome is `'pass'`, AND
+2. The step occurs after the **last source edit** (`edit-source`, `insert-source`,
+   `apply-patch` — excludes `create-file` which is often a throwaway script)
+
+This marks the first moment the tests confirm the implementation works, after
+the agent has stopped modifying source files.
+
+### `seq-work-done`
+
+Same step as `seq-first-all-pass`, but only if no source edits follow it
+(verified retrospectively). In practice, `seq-work-done` and
+`seq-first-all-pass` coincide by construction, since `first-all-pass`
+already requires being after the *last* source edit.
+
+If a trajectory has source edits but never gets a verify-pass after the last
+one (e.g. tests keep failing), neither marker is emitted.
+
+### Limitations
+
+- **Partial test suites**: The agent may run only a subset of tests that pass,
+  while other tests still fail. `work-done` fires on whatever the agent chose
+  to run, not on the full suite.
+- **`create-file` excluded from source edits**: Throwaway scripts like
+  `final_verification.py` often classify as `create-file`. Including them would
+  push `last_source_edit_idx` too late. The trade-off is that genuine new source
+  files (e.g. `src/controllers/new.js`) are also excluded.
+- **No outcome = no marker**: Trajectories where the agent only runs custom
+  verify scripts with ambiguous output won't get `work-done`.
+
+### Aggregate stats (2026-04-14)
+
+| | Claude 4.5 | GPT-5 |
+|---|---|---|
+| Trajectories with `seq-work-done` | 592 / 730 (81%) | 26 / 730 (4%) |
+| Mean steps after work-done | 25.6 | — |
+| Median steps after work-done | 25 | — |
+| Mean work-done position | 66% of trajectory | — |
+| Total post-work-done steps | 15,143 | — |
+
+For Claude, work-done fires at the 66% mark on average, meaning the remaining
+34% of the trajectory is post-completion activity.
+
+## Hierarchical intent layer (high-level categories + dot notation)
+
+Implemented in: `scripts/classify_intent.py` (`--hierarchical-layer`)
+
+This third layer groups every base intent into a compact set of high-level
+categories. Output labels are emitted as:
+
+- `<high-level>.<base-intent>`
+- Example: `read-code.read-file-full`
+
+### High-level categories (9 total)
+
+1. `read-code`
+2. `search-navigate`
+3. `reproduce`
+4. `implement`
+5. `verify`
+6. `git`
+7. `infrastructure`
+8. `failed`
+9. `other`
+
+### Deterministic mapping
+
+- `read-code.*`
+  - `read-file-full`, `read-file-range`, `read-file-full(truncated)`, `read-test-file`, `read-config-file`, `read-via-bash`
+- `search-navigate.*`
+  - `view-directory`, `list-directory`, `search-keyword`, `search-files-by-name`, `search-files-by-content`, `inspect-file-metadata`
+- `reproduce.*`
+  - `create-repro-script`, `run-repro-script`, `run-inline-snippet`
+- `implement.*`
+  - `edit-source`, `insert-source`, `apply-patch`, `create-file`
+- `verify.*`
+  - `run-test-suite`, `run-test-specific`, `create-test-script`, `run-verify-script`, `create-verify-script`, `edit-test-or-repro`, `run-custom-script`, `syntax-check`, `compile-build`
+- `git.*`
+  - `git-diff`, `git-inspect`, `git-stash`
+- `infrastructure.*`
+  - `file-cleanup`, `create-documentation`, `start-service`, `install-deps`, `check-tool-exists`
+- `failed.*`
+  - `search-keyword(failed)`, `read-via-bash(failed)`, `run-script(failed)`, `run-test-suite(failed)`, `bash-command(failed)`
+- `other.*`
+  - `submit`, `empty`, `echo`, `bash-other`, `undo-edit`
+
+### Hierarchical rules (pseudocode)
+
+```
+function hierarchical_intent(base_intent):
+    high_level = INTENT_TO_HIGH_LEVEL.get(base_intent, "other")
+    return high_level + "." + base_intent
+```
+
+This layer is intentionally simple and fully deterministic. It compresses
+fine-grained mechanics into higher-level behavioral buckets while preserving
+traceability to the original base intent.
