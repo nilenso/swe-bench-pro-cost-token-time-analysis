@@ -1042,7 +1042,7 @@ drawHeatmap('heatmapClaude', 'claude45', 'row');
 // 5b. Column-normalised
 
 // 6. Stacked area charts — 5 grouped bands, inline labels
-function drawStackedArea(canvasId, model, annotations) {{
+function drawStackedArea(canvasId, model, annotations, markers) {{
   const {{ ctx, w, h }} = getCtx(canvasId);
   const left = 40, right = 20, top = 10, bot = 20;
   const plotW = w - left - right;
@@ -1113,6 +1113,25 @@ function drawStackedArea(canvasId, model, annotations) {{
   ctx.lineTo(halfX, top + plotH);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Vertical markers
+  if (markers) {{
+    for (const m of markers) {{
+      const mx = xAt((m.at / 100) * (bins - 1));
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(mx, top);
+      ctx.lineTo(mx, top + plotH);
+      ctx.stroke();
+      // Small label at top
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.font = '9px Palatino, Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(m.label, mx, top - 3);
+    }}
+  }}
 
   // X labels
   ctx.fillStyle = MUTED; ctx.font = '10px Palatino, Georgia, serif'; ctx.textAlign = 'center';
@@ -1197,8 +1216,10 @@ const claudeAnnotations = [
   {{ from: 80, to: 98, label: 'cleanup', color: '#3a8a8a' }},
 ];
 
-drawStackedArea('stackedGpt', 'gpt5', gptAnnotations);
-drawStackedArea('stackedClaude', 'claude45', claudeAnnotations);
+drawStackedArea('stackedGpt', 'gpt5', gptAnnotations,
+  [{{ at: 90, label: 'median last edit' }}]);
+drawStackedArea('stackedClaude', 'claude45', claudeAnnotations,
+  [{{ at: 60, label: 'median last edit' }}]);
 
 </script>
 </body>
