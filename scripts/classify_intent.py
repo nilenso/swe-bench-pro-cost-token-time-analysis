@@ -338,6 +338,162 @@ def _extract_script_filename(cmd: str) -> str:
     return ""
 
 
+# ---------------------------------------------------------------------------
+# Verify outcome detection
+# ---------------------------------------------------------------------------
+# Intents whose observation can be parsed for pass/fail outcome.
+VERIFY_OUTCOME_INTENTS = {
+    "run-test-suite",
+    "run-test-specific",
+    "run-verify-script",
+    "run-custom-script",
+    "compile-build",
+    "syntax-check",
+}
+
+# Source-only edits (excludes test/repro edits, excludes create-file which is
+# often throwaway scripts like final_verification.py) — used for work-done.
+SOURCE_EDIT_INTENTS = {
+    "edit-source",
+    "insert-source",
+    "apply-patch",
+}
+
+# Pre-compiled patterns for test-runner summary parsing.
+# Verbose: "======= 5 passed in 0.08s ======="
+_RE_PYTEST_SUMMARY = re.compile(
+    r"=+\s+(.*?\d+\s+(?:passed|failed|error).*?)\s+in\s+[\d.]+s\s*=+",
+)
+# Quiet (-q): "5 passed in 0.08s" or "1 failed, 5 passed in 0.08s" (no === border)
+_RE_PYTEST_SUMMARY_QUIET = re.compile(
+    r"^(\d+\s+(?:passed|failed|error)(?:,\s+\d+\s+\w+)*\s+in\s+[\d.]+s)\s*$",
+    re.MULTILINE,
+)
+_RE_PYTEST_FAIL_IN_SUMMARY = re.compile(r"\d+\s+(?:failed|error)")
+_RE_PYTEST_PASSED_IN_SUMMARY = re.compile(r"\d+\s+passed")
+_RE_MOCHA_PASSING = re.compile(r"(\d+)\s+passing")
+_RE_MOCHA_FAILING = re.compile(r"(\d+)\s+failing")
+_RE_GO_RESULT = re.compile(r"^(ok|FAIL)\s+\S+", re.MULTILINE)
+_RE_GO_TEST_LINE = re.compile(r"--- (PASS|FAIL):", re.MULTILINE)
+_RE_JEST_SUMMARY = re.compile(r"Tests:\s+(.+)")
+_RE_COMPILE_ERROR = re.compile(
+    r"(?:syntax|compile|build)\s+error|cannot\s+find|undefined:|"
+    r"cannot\s+use|undeclared\s+name|expected\s+",
+    re.IGNORECASE,
+)
+_RE_EXIT_NONZERO = re.compile(r"^exit status [1-9]", re.MULTILINE)
+_RE_TRACEBACK = re.compile(r"Traceback \(most recent call last\)")
+_RE_NODE_THROW = re.compile(r"throw\s+\w+|Error:.*\n\s+at\s+")
+_RE_CUSTOM_SUMMARY = re.compile(r"(\d+)\s+passed.*?(\d+)\s+failed")
+
+
+def classify_verify_outcome(action: str, observation: str, base_intent: str) -> str:
+    """Classify the outcome of a verify step as 'pass', 'fail', or '' (unknown).
+
+    Only attempts classification for VERIFY_OUTCOME_INTENTS.
+    Returns '' when the outcome cannot be unambiguously determined.
+    """
+    if base_intent not in VERIFY_OUTCOME_INTENTS:
+        return ""
+    if not observation:
+        return ""
+
+    tail = observation[-2000:]
+
+    # --- pytest ---
+    # Try verbose (=== bordered) first, then quiet (-q) format.
+    m = _RE_PYTEST_SUMMARY.search(tail) or _RE_PYTEST_SUMMARY_QUIET.search(tail)
+    if m:
+        summary = m.group(1)
+        if _RE_PYTEST_FAIL_IN_SUMMARY.search(summary):
+            return "fail"
+        if _RE_PYTEST_PASSED_IN_SUMMARY.search(summary):
+            return "pass"
+
+    # pytest: "no tests ran" or "N error in Xs" (collection/setup errors)
+    if re.search(r"no tests ran", tail, re.IGNORECASE):
+        return "fail"
+    if re.search(r"\d+\s+error\s+in\s+[\d.]+s", tail):
+        return "fail"
+
+    # --- mocha ---
+    mp = _RE_MOCHA_PASSING.search(tail)
+    if mp:
+        mf = _RE_MOCHA_FAILING.search(tail)
+        if mf and int(mf.group(1)) > 0:
+            return "fail"
+        return "pass"
+
+    # --- go test ---
+    go_results = _RE_GO_RESULT.findall(tail)
+    if go_results:
+        return "fail" if "FAIL" in go_results else "pass"
+    go_lines = _RE_GO_TEST_LINE.findall(tail)
+    if go_lines:
+        return "fail" if "FAIL" in go_lines else "pass"
+
+    # --- jest ---
+    jm = _RE_JEST_SUMMARY.search(tail)
+    if jm:
+        s = jm.group(1)
+        if "failed" in s:
+            return "fail"
+        if "passed" in s:
+            return "pass"
+
+    # --- compile/build errors ---
+    if base_intent == "compile-build":
+        if _RE_COMPILE_ERROR.search(tail):
+            return "fail"
+        if _RE_EXIT_NONZERO.search(tail):
+            return "fail"
+        if "panic:" in tail:
+            return "fail"
+        # Empty or clean output from go build / go vet = pass,
+        # but only when the observation is short (< 200 chars of real content).
+        stripped = observation.strip()
+        if not stripped or len(stripped) < 200:
+            # Check the action includes a known build command
+            action_lower = (action or "").lower()
+            if _contains_any(action_lower, ("go build", "go vet", "make")):
+                return "pass"
+        return ""
+
+    # --- syntax-check ---
+    if base_intent == "syntax-check":
+        # Syntax checks with && echo "✓ ..." — if the echo text appears, it passed.
+        if "&&" in (action or "") and "\u2713" in tail:
+            return "pass"
+        # py_compile with no output = pass
+        if "py_compile" in (action or "").lower():
+            if not observation.strip():
+                return "pass"
+            if "Error" in tail or "SyntaxError" in tail:
+                return "fail"
+            return "pass"
+        return ""
+
+    # --- custom verify/test scripts ---
+    # Only classify when there's an unambiguous structured summary.
+    cm = _RE_CUSTOM_SUMMARY.search(tail)
+    if cm:
+        return "fail" if int(cm.group(2)) > 0 else "pass"
+
+    # Traceback at the end = fail
+    if _RE_TRACEBACK.search(tail[-500:]):
+        return "fail"
+
+    # Node.js throw/error at the end
+    if _RE_NODE_THROW.search(tail[-500:]):
+        return "fail"
+
+    # Non-zero exit
+    if _RE_EXIT_NONZERO.search(tail):
+        return "fail"
+
+    return ""
+
+
 def classify_step(action: str, observation: str = "") -> str:
     """Classify one trajectory step into deterministic intent label."""
     action = action or ""
@@ -558,10 +714,49 @@ def classify_hierarchical_counts(base_intents: list[str]) -> Counter:
     return Counter(classify_hierarchical_layer(base_intents))
 
 
-def classify_sequence_layer(trajectory: list[dict], base_intents: list[str]) -> list[str]:
-    """Second-layer deterministic sequence intents derived from base intents + nearby history."""
-    seq_labels: list[str] = []
+def classify_verify_outcomes(trajectory: list[dict], base_intents: list[str]) -> list[str]:
+    """Per-step verify outcome: 'pass', 'fail', or '' (not a verify-run step or unknown)."""
+    outcomes: list[str] = []
+    for step, base_intent in zip(trajectory, base_intents):
+        action = step.get("action", "") or ""
+        observation = step.get("observation", "") or ""
+        outcomes.append(classify_verify_outcome(action, observation, base_intent))
+    return outcomes
 
+
+def classify_sequence_layer(
+    trajectory: list[dict],
+    base_intents: list[str],
+    verify_outcomes: list[str] | None = None,
+) -> list[str]:
+    """Second-layer deterministic sequence intents derived from base intents + nearby history.
+
+    When *verify_outcomes* is provided (list of 'pass'/'fail'/'' per step),
+    two additional retrospective markers are emitted:
+
+    - ``seq-first-all-pass``: the first verify-pass that occurs after the last
+      source edit (i.e. the first moment the tests confirm the finished
+      implementation works).
+    - ``seq-work-done``: same step as first-all-pass when the trajectory has no
+      further source edits after it (retrospective — requires knowing the full
+      trajectory).  Differs from first-all-pass only conceptually: first-all-pass
+      marks "tests pass after last edit", work-done marks "this is the point
+      after which nothing productive happens".
+    """
+    n = len(base_intents)
+    seq_labels: list[str] = [""] * n
+
+    # --- Pre-scan: find last source edit index (for first-all-pass / work-done) ---
+    last_source_edit_idx = -1
+    if verify_outcomes is not None:
+        for i in range(n - 1, -1, -1):
+            if base_intents[i] in SOURCE_EDIT_INTENTS:
+                last_source_edit_idx = i
+                break
+
+    first_all_pass_emitted = False
+
+    # --- Forward pass ---
     seen_verify = False
     seen_repro = False
     edited_since_verify = False
@@ -571,7 +766,7 @@ def classify_sequence_layer(trajectory: list[dict], base_intents: list[str]) -> 
     prev_base = ""
     edited_paths: set[str] = set()
 
-    for step, base_intent in zip(trajectory, base_intents):
+    for i, (step, base_intent) in enumerate(zip(trajectory, base_intents)):
         action = step.get("action", "") or ""
         action_line = _safe_first_line(action)
         signature = _command_signature(action)
@@ -589,6 +784,17 @@ def classify_sequence_layer(trajectory: list[dict], base_intents: list[str]) -> 
             seen_verify = True
             edited_since_verify = False
             prev_verify_sig = signature
+
+            # --- first-all-pass / work-done ---
+            if (
+                verify_outcomes is not None
+                and not first_all_pass_emitted
+                and verify_outcomes[i] == "pass"
+                and i > last_source_edit_idx
+                and last_source_edit_idx >= 0
+            ):
+                seq = "seq-first-all-pass"
+                first_all_pass_emitted = True
 
         elif base_intent in SEQUENCE_REPRO_INTENTS:
             if seen_repro and (not edited_since_repro) and signature and signature == prev_repro_sig:
@@ -628,14 +834,32 @@ def classify_sequence_layer(trajectory: list[dict], base_intents: list[str]) -> 
         elif base_intent == "submit" and seen_verify:
             seq = "seq-submit-after-verify"
 
-        seq_labels.append(seq)
+        seq_labels[i] = seq
         prev_base = base_intent
+
+    # --- Retrospective: work-done ---
+    # work-done = first-all-pass step, but only if no source edits follow it.
+    # Since first-all-pass is already defined as "first verify-pass after last
+    # source edit", work-done coincides with it by construction.  We emit it as
+    # a separate label on the same step so downstream can use either name.
+    if first_all_pass_emitted:
+        for i in range(n):
+            if seq_labels[i] == "seq-first-all-pass":
+                # Verify no source edits after this point (should hold by
+                # construction, but be explicit).
+                has_later_source_edit = any(
+                    base_intents[j] in SOURCE_EDIT_INTENTS for j in range(i + 1, n)
+                )
+                if not has_later_source_edit:
+                    seq_labels[i] = "seq-work-done"
+                break
 
     return seq_labels
 
 
 def classify_sequence_counts(trajectory: list[dict], base_intents: list[str]) -> Counter:
-    return Counter(classify_sequence_layer(trajectory, base_intents))
+    outcomes = classify_verify_outcomes(trajectory, base_intents)
+    return Counter(classify_sequence_layer(trajectory, base_intents, verify_outcomes=outcomes))
 
 
 def classify_file(traj_path: str) -> tuple[list[str], dict]:
@@ -660,7 +884,7 @@ def _collect_traj_files(paths: list[str]) -> list[Path]:
     return sorted(traj_files)
 
 
-def _classify_file_summary(task: tuple[str, bool, bool]) -> tuple[str, int, str, dict[str, int], dict[str, int], dict[str, int]]:
+def _classify_file_summary(task: tuple[str, bool, bool]) -> tuple[str, int, str, dict[str, int], dict[str, int], dict[str, int], dict[str, int]]:
     traj_path, include_sequence, include_hierarchical = task
     data = _load_json(traj_path)
     trajectory = data.get("trajectory", [])
@@ -668,8 +892,11 @@ def _classify_file_summary(task: tuple[str, bool, bool]) -> tuple[str, int, str,
     base_counts = Counter(base_intents)
 
     sequence_counts: Counter = Counter()
+    outcome_counts: Counter = Counter()
     if include_sequence:
-        sequence_counts = classify_sequence_counts(trajectory, base_intents)
+        outcomes = classify_verify_outcomes(trajectory, base_intents)
+        sequence_counts = Counter(classify_sequence_layer(trajectory, base_intents, verify_outcomes=outcomes))
+        outcome_counts = Counter(oc for oc in outcomes if oc)
 
     hierarchical_counts: Counter = Counter()
     if include_hierarchical:
@@ -683,6 +910,7 @@ def _classify_file_summary(task: tuple[str, bool, bool]) -> tuple[str, int, str,
         dict(base_counts),
         dict(sequence_counts),
         dict(hierarchical_counts),
+        dict(outcome_counts),
     )
 
 
@@ -709,6 +937,7 @@ def main() -> None:
     total = Counter()
     total_sequence = Counter()
     total_hierarchical = Counter()
+    total_outcomes = Counter()
     t0 = time.perf_counter()
 
     if args.workers <= 1:
@@ -719,10 +948,13 @@ def main() -> None:
             c = Counter(intents)
             total.update(c)
 
+            outcomes: list[str] = []
             seq_labels: list[str] = []
             if args.sequence_layer:
-                seq_labels = classify_sequence_layer(trajectory, intents)
+                outcomes = classify_verify_outcomes(trajectory, intents)
+                seq_labels = classify_sequence_layer(trajectory, intents, verify_outcomes=outcomes)
                 total_sequence.update(seq_labels)
+                total_outcomes.update(oc for oc in outcomes if oc)
 
             hier_labels: list[str] = []
             if args.hierarchical_layer:
@@ -744,13 +976,18 @@ def main() -> None:
                     if i > args.show:
                         break
                     action_line = _safe_first_line(step.get("action", ""))
+                    outcome_tag = ""
+                    if outcomes:
+                        oc = outcomes[i - 1]
+                        if oc:
+                            outcome_tag = f"[{oc}]"
                     if args.sequence_layer and args.hierarchical_layer:
                         seq = seq_labels[i - 1]
                         hier = hier_labels[i - 1]
-                        print(f"  {i:>3}  {intent:<28} {hier:<44} {seq:<34} {action_line[:90]}")
+                        print(f"  {i:>3}  {intent:<28} {outcome_tag:<6} {hier:<44} {seq:<34} {action_line[:80]}")
                     elif args.sequence_layer:
                         seq = seq_labels[i - 1]
-                        print(f"  {i:>3}  {intent:<28} {seq:<36} {action_line[:120]}")
+                        print(f"  {i:>3}  {intent:<28} {outcome_tag:<6} {seq:<36} {action_line[:100]}")
                     elif args.hierarchical_layer:
                         hier = hier_labels[i - 1]
                         print(f"  {i:>3}  {intent:<28} {hier:<44} {action_line[:110]}")
@@ -760,11 +997,12 @@ def main() -> None:
         max_workers = min(max(args.workers, 1), os.cpu_count() or 1)
         tasks = [(str(p), bool(args.sequence_layer), bool(args.hierarchical_layer)) for p in traj_files]
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
-            for traj_path, steps, exit_status, counts, sequence_counts, hierarchical_counts in ex.map(_classify_file_summary, tasks, chunksize=16):
+            for traj_path, steps, exit_status, counts, sequence_counts, hierarchical_counts, outcome_counts in ex.map(_classify_file_summary, tasks, chunksize=16):
                 c = Counter(counts)
                 total.update(c)
                 if args.sequence_layer:
                     total_sequence.update(sequence_counts)
+                    total_outcomes.update(outcome_counts)
                 if args.hierarchical_layer:
                     total_hierarchical.update(hierarchical_counts)
                 if not args.quiet:
@@ -794,6 +1032,9 @@ def main() -> None:
     if args.sequence_layer:
         print("\n=== sequence aggregate ===")
         print(dict(total_sequence.most_common()))
+        if total_outcomes:
+            print("\n=== verify outcomes ===")
+            print(dict(total_outcomes.most_common()))
     print(f"files={len(traj_files)} steps={total_steps} elapsed_sec={elapsed:.3f}")
 
     if args.json_output:
@@ -808,6 +1049,8 @@ def main() -> None:
             payload["high_level_categories"] = dict(high_level_counts.most_common())
         if args.sequence_layer:
             payload["sequence_intents"] = dict(total_sequence.most_common())
+            if total_outcomes:
+                payload["verify_outcomes"] = dict(total_outcomes.most_common())
         with open(args.json_output, "w") as f:
             json.dump(payload, f, indent=2)
         print(f"wrote {args.json_output}")

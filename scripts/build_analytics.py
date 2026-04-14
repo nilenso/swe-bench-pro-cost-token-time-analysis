@@ -42,12 +42,12 @@ LETTER_TO_NAME = {v: k for k, v in HIGH_LEVEL_LETTER.items()}
 # Colors keyed by the short name (not letter)
 HIGH_LEVEL_COLORS = {
     "read": "#5a7d9a",
-    "search": "#b07040",
-    "reproduce": "#7a6a9a",
+    "search": "#5a7d9a",
+    "reproduce": "#b0956a",
     "edit": "#4a8a5a",
-    "verify": "#a0607a",
-    "git": "#8a7a40",
-    "housekeeping": "#4a8a8a",
+    "verify": "#b56a50",
+    "git": "#3a8a8a",
+    "housekeeping": "#3a8a8a",
     "failed": "#a05050",
     "other": "#888",
 }
@@ -536,7 +536,7 @@ def render_html(payload: dict) -> str:
     .paired-bar {{
       height: 11px;
       border-radius: 2px;
-      opacity: 0.75;
+      opacity: 0.85;
     }}
     .paired-bar-val {{
       font-size: 9.5px;
@@ -643,78 +643,13 @@ def render_html(payload: dict) -> str:
     <div id="heatTable"></div>
   </div>
 
-  <h2>3. Transition Matrices</h2>
-  <p class="chart-desc">Each cell shows how often one action follows another (as % of all transitions). Diagonal = self-repeats. Read row &rarr; column as "from &rarr; to".</p>
-  <div class="side-by-side">
-    <div class="chart-wrapper">
-      <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
-      <div id="matrixGpt"></div>
-    </div>
-    <div class="chart-wrapper">
-      <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
-      <div id="matrixClaude"></div>
-    </div>
-  </div>
-  <div class="chart-wrapper" style="margin-top:16px">
-    <div class="side-label" style="margin-bottom:12px">Difference (GPT &minus; Claude)</div>
-    <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:14px;color:var(--muted)">
-      <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:var(--gpt)"></div>
-        <span>GPT does this transition more</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:var(--claude)"></div>
-        <span>Claude does this transition more</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:#ccc"></div>
-        <span>~equal</span>
-      </div>
-      <div><span style="color:var(--text)">Brighter</span> = larger gap &nbsp; <span style="color:var(--text)">Values</span> = percentage point difference</div>
-    </div>
-    <div id="matrixDiff"></div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-top:14px;color:var(--muted);font-family:ui-monospace,monospace">
-      <span><strong style="color:var(--text)">R</strong>=read</span>
-      <span><strong style="color:var(--text)">S</strong>=search</span>
-      <span><strong style="color:var(--text)">P</strong>=reproduce</span>
-      <span><strong style="color:var(--text)">E</strong>=edit</span>
-      <span><strong style="color:var(--text)">V</strong>=verify</span>
-      <span><strong style="color:var(--text)">G</strong>=git</span>
-      <span><strong style="color:var(--text)">H</strong>=housekeeping</span>
-      <span><strong style="color:var(--text)">X</strong>=failed</span>
-      <span><strong style="color:var(--text)">O</strong>=other</span>
-    </div>
-  </div>
-
-  <h2>4. Trajectory Length Distribution</h2>
+  <h2>3. Trajectory Length Distribution</h2>
   <p class="chart-desc">How many steps each model typically takes per task.</p>
   <div class="chart-wrapper">
     <canvas id="stepDistChart" height="280"></canvas>
   </div>
 
-  <h2>5. Phase Profile — When Does Each Action Happen?</h2>
-  <p class="chart-desc">Each trajectory is divided into 20 equal time-slices (0%–100%). The heatmap shows what proportion of steps in each slice belong to each category. Read left-to-right as "beginning → end of trajectory".</p>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
-    <div id="heatmapGpt"></div>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
-    <div id="heatmapClaude"></div>
-  </div>
-
-  <h2>5b. Phase Dominance — What Dominates Each Slice?</h2>
-  <p class="chart-desc">Same data, but normalised per column: within each time-slice, which category takes the largest share? Brighter = dominates that phase.</p>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
-    <div id="heatmapColGpt"></div>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
-    <div id="heatmapColClaude"></div>
-  </div>
-
-  <h2>6. Typical Trajectory Shape</h2>
+  <h2>4. Typical Trajectory Shape</h2>
   <p class="chart-desc">Stacked area chart: how the mix of actions evolves from start to end of the average trajectory.</p>
   <div class="chart-wrapper">
     <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
@@ -723,6 +658,17 @@ def render_html(payload: dict) -> str:
   <div class="chart-wrapper">
     <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
     <canvas id="stackedClaude" height="200"></canvas>
+  </div>
+
+  <h2>4b. Phase Profile — When Does Each Action Happen?</h2>
+  <p class="chart-desc">Each trajectory is divided into 20 equal time-slices (0%–100%). The heatmap shows what proportion of steps in each slice belong to each category. Read left-to-right as "beginning → end of trajectory".</p>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
+    <div id="heatmapGpt"></div>
+  </div>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
+    <div id="heatmapClaude"></div>
   </div>
 
 </div>
@@ -745,8 +691,8 @@ function getCtx(id) {{
   return {{ canvas: c, ctx, w: cssW, h: cssH }};
 }}
 
-const GPT_COLOR = '#c67a2e';
-const CLAUDE_COLOR = '#4a7fb5';
+const GPT_COLOR = '#b07040';
+const CLAUDE_COLOR = '#5a7d9a';
 const MUTED = '#6b7280';
 const TEXT = '#1a1a1a';
 
@@ -818,7 +764,7 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   const maxVal = Math.max(...gptVals, ...claudeVals, 0.001);
 
   // Vertical grid
-  ctx.strokeStyle = MUTED; ctx.lineWidth = 0.5;
+  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {{
     const x = left + (i / 4) * plotW;
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + plotH); ctx.stroke();
@@ -970,95 +916,7 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   }}
 }})();
 
-// 3. Transition matrices
-function drawTransitionMatrix(containerId, matrix, mode) {{
-  const el = document.getElementById(containerId);
-  const letters = D.bigram_letters;
-  const n = letters.length;
-  const cols = n + 1; // +1 for row header
-  el.innerHTML = '';
-
-  const grid = document.createElement('div');
-  grid.className = 'tmatrix';
-  grid.style.gridTemplateColumns = `40px repeat(${{n}}, 48px)`;
-
-  // Corner
-  const corner = document.createElement('div');
-  corner.className = 'corner';
-  corner.innerHTML = '<span style="color:#546170;font-size:9px">from\\to</span>';
-  grid.appendChild(corner);
-
-  // Column headers
-  for (const l of letters) {{
-    const hdr = document.createElement('div');
-    hdr.className = 'col-hdr';
-    hdr.textContent = l;
-    grid.appendChild(hdr);
-  }}
-
-  // Find max for color scaling
-  let maxVal = 0;
-  if (mode === 'diff') {{
-    for (let r = 0; r < n; r++)
-      for (let c = 0; c < n; c++)
-        maxVal = Math.max(maxVal, Math.abs(matrix[r][c]));
-  }} else {{
-    for (let r = 0; r < n; r++)
-      for (let c = 0; c < n; c++)
-        maxVal = Math.max(maxVal, matrix[r][c]);
-  }}
-  if (maxVal === 0) maxVal = 0.01;
-
-  for (let r = 0; r < n; r++) {{
-    // Row header
-    const rh = document.createElement('div');
-    rh.className = 'row-hdr';
-    rh.textContent = letters[r];
-    grid.appendChild(rh);
-
-    for (let c = 0; c < n; c++) {{
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      const v = matrix[r][c];
-
-      if (mode === 'diff') {{
-        const intensity = Math.sqrt(Math.abs(v) / maxVal);
-        const alpha = 0.15 + intensity * 0.85;
-        const color = v > 0.0001 ? GPT_COLOR : v < -0.0001 ? CLAUDE_COLOR : '#ccc';
-        cell.style.background = color;
-        cell.style.opacity = alpha.toFixed(2);
-        if (Math.abs(v) > 0.001) {{
-          cell.textContent = (v > 0 ? '+' : '') + (v * 100).toFixed(1);
-        }}
-      }} else {{
-        const intensity = Math.sqrt(v / maxVal);
-        const alpha = 0.2 + intensity * 0.8;
-        const color = LETTER_COLORS[letters[r]] || '#6cb6ff';
-        cell.style.background = color;
-        cell.style.opacity = alpha.toFixed(2);
-        if (v > 0.001) {{
-          cell.textContent = (v * 100).toFixed(1);
-        }}
-      }}
-
-      cell.title = `${{letters[r]}} → ${{letters[c]}}: ${{(v * 100).toFixed(2)}}%`;
-      grid.appendChild(cell);
-    }}
-  }}
-
-  el.appendChild(grid);
-}}
-
-drawTransitionMatrix('matrixGpt', D.bigram_matrix.gpt5, 'single');
-drawTransitionMatrix('matrixClaude', D.bigram_matrix.claude45, 'single');
-
-// Diff matrix
-const diffMatrix = D.bigram_matrix.gpt5.map((row, r) =>
-  row.map((v, c) => v - D.bigram_matrix.claude45[r][c])
-);
-drawTransitionMatrix('matrixDiff', diffMatrix, 'diff');
-
-// 4. Step distribution
+// 3. Step distribution
 (function() {{
   const {{ ctx, w, h }} = getCtx('stepDistChart');
   const left = 50, right = 20, top = 20, bot = 50;
@@ -1080,7 +938,7 @@ drawTransitionMatrix('matrixDiff', diffMatrix, 'diff');
   const claudeVals = bins.map(b => (D.step_dist.claude45[b] || 0) / claudeTotal);
   const maxVal = Math.max(...gptVals, ...claudeVals, 0.01);
 
-  ctx.strokeStyle = MUTED; ctx.lineWidth = 0.5;
+  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {{
     const y = top + plotH - (i / 4) * plotH;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(w - right, y); ctx.stroke();
@@ -1092,10 +950,12 @@ drawTransitionMatrix('matrixDiff', diffMatrix, 'diff');
     const x = left + i * groupW + groupW * 0.08;
     const gH = (gptVals[i] / maxVal) * plotH;
     const cH = (claudeVals[i] / maxVal) * plotH;
+    ctx.globalAlpha = 0.85;
     ctx.fillStyle = GPT_COLOR;
     ctx.fillRect(x, top + plotH - gH, barW, gH);
     ctx.fillStyle = CLAUDE_COLOR;
     ctx.fillRect(x + barW + 1, top + plotH - cH, barW, cH);
+    ctx.globalAlpha = 1;
 
     if (i % 2 === 0 || n < 20) {{
       ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'center';
@@ -1164,7 +1024,8 @@ function drawHeatmap(containerId, model, normalize) {{
       const maxV = normalize === 'col' ? (maxPerCol[b] || 0.001) : (maxPerRow[letter] || 0.001);
       const ratio = vals[b] / maxV;
       // Use sqrt for better spread, but map 0 → 0 exactly
-      const t = ratio > 0 ? 0.15 + Math.sqrt(ratio) * 0.85 : 0;
+      const pctVal = vals[b] * 100;
+      const t = pctVal < 0.5 ? 0 : 0.15 + Math.sqrt(ratio) * 0.85;
       const bg = lerpColor(color, t);
       const textColor = t > 0.5 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)';
       html += `<div class="heatmap-cell" style="background:${{bg}};color:${{textColor}}">${{(vals[b]*100).toFixed(0)}}%</div>`;
@@ -1179,14 +1040,11 @@ drawHeatmap('heatmapGpt', 'gpt5', 'row');
 drawHeatmap('heatmapClaude', 'claude45', 'row');
 
 // 5b. Column-normalised
-drawHeatmapCol = drawHeatmap; // reuse
-drawHeatmap('heatmapColGpt', 'gpt5', 'col');
-drawHeatmap('heatmapColClaude', 'claude45', 'col');
 
 // 6. Stacked area charts — 5 grouped bands, inline labels
 function drawStackedArea(canvasId, model, annotations) {{
   const {{ ctx, w, h }} = getCtx(canvasId);
-  const left = 40, right = 80, top = 10, bot = 20;
+  const left = 40, right = 20, top = 10, bot = 20;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
@@ -1194,10 +1052,10 @@ function drawStackedArea(canvasId, model, annotations) {{
   // 5 grouped bands: understand (R+S), reproduce (P), edit (E), verify (V), cleanup (G+H)
   const groups = [
     {{ name: 'understand', letters: ['R','S'], color: '#5a7d9a' }},
-    {{ name: 'reproduce', letters: ['P'], color: '#7a6a9a' }},
+    {{ name: 'reproduce', letters: ['P'], color: '#b0956a' }},
     {{ name: 'edit',      letters: ['E'], color: '#4a8a5a' }},
-    {{ name: 'verify',    letters: ['V'], color: '#a0607a' }},
-    {{ name: 'cleanup',   letters: ['G','H'], color: '#8a7a40' }},
+    {{ name: 'verify',    letters: ['V'], color: '#b56a50' }},
+    {{ name: 'cleanup',   letters: ['G','H'], color: '#3a8a8a' }},
   ];
 
   // Sum letters per group per bin
@@ -1231,7 +1089,7 @@ function drawStackedArea(canvasId, model, annotations) {{
   for (let s = stacked.length - 1; s >= 0; s--) {{
     const layer = stacked[s];
     ctx.fillStyle = layer.group.color;
-    ctx.globalAlpha = 0.75;
+    ctx.globalAlpha = 0.85;
     ctx.beginPath();
     for (let i = 0; i < bins; i++) {{
       const x = xAt(i), y = yAt(layer.top[i], i);
@@ -1245,16 +1103,16 @@ function drawStackedArea(canvasId, model, annotations) {{
   }}
   ctx.globalAlpha = 1;
 
-  // Labels at the right edge of each band
-  const lastBin = bins - 1;
-  ctx.font = '11px Palatino, Georgia, serif';
-  ctx.textAlign = 'left';
-  for (let s = 0; s < stacked.length; s++) {{
-    const layer = stacked[s];
-    const midY = (yAt(layer.top[lastBin], lastBin) + yAt(layer.bottom[lastBin], lastBin)) / 2;
-    ctx.fillStyle = layer.group.color;
-    ctx.fillText(layer.group.name, xAt(lastBin) + 8, midY + 4);
-  }}
+  // 50% vertical reference line
+  const halfX = xAt((bins - 1) / 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(halfX, top);
+  ctx.lineTo(halfX, top + plotH);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // X labels
   ctx.fillStyle = MUTED; ctx.font = '10px Palatino, Georgia, serif'; ctx.textAlign = 'center';
@@ -1279,38 +1137,64 @@ function drawStackedArea(canvasId, model, annotations) {{
       const midBinInt = Math.round(midBin);
       const bandTop = yAt(stacked[gi].top[midBinInt], midBinInt);
       const bandBot = yAt(stacked[gi].bottom[midBinInt], midBinInt);
-      const y = (bandTop + bandBot) / 2;
+      const bandH = Math.abs(bandBot - bandTop);
+      const midY = (bandTop + bandBot) / 2;
 
-      // Bracket: thin horizontal line with small verticals at ends
+      // Bracket
       ctx.strokeStyle = '#fff';
       ctx.globalAlpha = 0.6;
       ctx.beginPath();
-      ctx.moveTo(x0, y); ctx.lineTo(x1, y);
-      ctx.moveTo(x0, y - 4); ctx.lineTo(x0, y + 4);
-      ctx.moveTo(x1, y - 4); ctx.lineTo(x1, y + 4);
+      ctx.moveTo(x0, midY); ctx.lineTo(x1, midY);
+      ctx.moveTo(x0, midY - 4); ctx.lineTo(x0, midY + 4);
+      ctx.moveTo(x1, midY - 4); ctx.lineTo(x1, midY + 4);
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Label centered on the bracket
-      ctx.fillStyle = '#fff';
-      ctx.globalAlpha = 0.9;
+      // Label: if band is thick enough, place inside. Otherwise, place above with a connecting line.
       ctx.font = '9.5px Palatino, Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText(a.label, (x0 + x1) / 2, y - 7);
-      ctx.globalAlpha = 1;
+      const labelX = (x0 + x1) / 2;
+
+      if (bandH > 30) {{
+        // Inside the band
+        ctx.fillStyle = '#fff';
+        ctx.globalAlpha = 0.9;
+        ctx.fillText(a.label, labelX, midY - 7);
+        ctx.globalAlpha = 1;
+      }} else {{
+        // Outside the band with a small connecting line
+        // Place below if near the top edge, above otherwise
+        const placeBelow = bandTop < top + 30;
+        const labelY = placeBelow ? bandBot + 4 : bandTop - 8;
+        const lineEnd = placeBelow ? bandBot : bandTop;
+        const lineStart = placeBelow ? labelY - 10 : labelY + 3;
+        ctx.fillStyle = '#fff';
+        ctx.globalAlpha = 0.9;
+        ctx.fillText(a.label, labelX, labelY);
+        // Thin connecting line
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(labelX, lineStart);
+        ctx.lineTo(labelX, lineEnd);
+        ctx.stroke();
+        ctx.lineWidth = 0.8;
+      }}
     }}
   }}
 }}
 
 const gptAnnotations = [
-  {{ from: 50, to: 80, label: 'edits peak here', color: '#4a8a5a' }},
-  {{ from: 85, to: 100, label: 'verification', color: '#a0607a' }},
-  {{ from: 80, to: 100, label: 'reproduce scripts', color: '#7a6a9a' }},
+  {{ from: 2, to: 50, label: 'understand', color: '#5a7d9a' }},
+  {{ from: 50, to: 80, label: 'edit', color: '#4a8a5a' }},
+  {{ from: 85, to: 98, label: 'verify', color: '#b56a50' }},
+  {{ from: 78, to: 98, label: 'reproduce', color: '#b0956a' }},
 ];
 const claudeAnnotations = [
-  {{ from: 30, to: 50, label: 'edits peak here', color: '#4a8a5a' }},
-  {{ from: 60, to: 80, label: 'verification peaks', color: '#a0607a' }},
-  {{ from: 80, to: 100, label: 'cleanup', color: '#8a7a40' }},
+  {{ from: 2, to: 30, label: 'understand', color: '#5a7d9a' }},
+  {{ from: 30, to: 55, label: 'edit', color: '#4a8a5a' }},
+  {{ from: 60, to: 80, label: 'verify', color: '#b56a50' }},
+  {{ from: 80, to: 98, label: 'cleanup', color: '#3a8a8a' }},
 ];
 
 drawStackedArea('stackedGpt', 'gpt5', gptAnnotations);
