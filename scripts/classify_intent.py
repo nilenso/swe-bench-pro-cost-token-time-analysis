@@ -1,352 +1,817 @@
 #!/usr/bin/env python3
 """
-Intent-based phase classifier for SWE-Agent trajectories.
+Deterministic command-level intent classifier for SWE-Agent trajectories.
 
-Classifies each step into a workflow phase based on what the agent
-is TRYING TO DO, not which tool it called.
+Rules are implemented from:
+  docs/intent-classification-rules.md
 
-Phases:
-  O = ORIENT    — discovering repo structure, finding relevant files
-  R = READ      — reading/understanding specific source code  
-  D = REPRODUCE — confirming the bug exists (pre-implementation)
-  I = IMPLEMENT — making code changes to source files
-  V = VERIFY    — confirming the fix works (post-implementation)
-  S = SUBMIT    — submitting the patch
-  ! = ERROR     — failed/broken command, empty action
+Classification is based on literal command/action text (+ filename + limited
+observation checks for error/truncation/directory listing), without positional
+phase context.
 """
 
+from __future__ import annotations
+
+import argparse
 import json
-import re
 import os
+import re
+import shlex
+import time
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+
+try:
+    import orjson  # type: ignore
+except Exception:  # pragma: no cover
+    orjson = None
 
 
-def _is_directory_target(action_line):
-    """Check if a view command targets a directory (not a file)."""
-    # Extract the path from 'str_replace_editor view /some/path'
-    parts = action_line.split()
-    if len(parts) < 3:
+CONFIG_FILES = {
+    "package.json",
+    "pytest.ini",
+    "setup.cfg",
+    "setup.py",
+    "go.mod",
+    "makefile",
+    "config.json",
+}
+
+TEST_FILE_RE = re.compile(r"^(test_.*|.*_test\..*|conftest.*)$")
+
+# Sequence-layer groups (second pass over base intents)
+SEQUENCE_VERIFY_INTENTS = {
+    "run-test-suite",
+    "run-test-specific",
+    "run-verify-script",
+    "run-custom-script",
+    "compile-build",
+    "syntax-check",
+}
+SEQUENCE_REPRO_INTENTS = {
+    "run-repro-script",
+    "run-inline-snippet",
+}
+SEQUENCE_EDIT_INTENTS = {
+    "edit-source",
+    "insert-source",
+    "apply-patch",
+    "edit-test-or-repro",
+    "create-file",
+}
+SEQUENCE_FAILED_VERIFY_INTENTS = {
+    "run-test-suite(failed)",
+    "run-script(failed)",
+}
+SEQUENCE_READ_INTENTS = {
+    "read-file-full",
+    "read-file-range",
+    "read-file-full(truncated)",
+    "read-test-file",
+    "read-config-file",
+    "read-via-bash",
+}
+SEQUENCE_SEARCH_INTENTS = {
+    "search-keyword",
+    "search-files-by-name",
+    "search-files-by-content",
+    "search-keyword(failed)",
+}
+
+# Third-layer hierarchical grouping: <high-level>.<base-intent>
+INTENT_TO_HIGH_LEVEL = {
+    # read-code
+    "read-file-full": "read-code",
+    "read-file-range": "read-code",
+    "read-file-full(truncated)": "read-code",
+    "read-test-file": "read-code",
+    "read-config-file": "read-code",
+    "read-via-bash": "read-code",
+
+    # search-navigate
+    "view-directory": "search-navigate",
+    "list-directory": "search-navigate",
+    "search-keyword": "search-navigate",
+    "search-files-by-name": "search-navigate",
+    "search-files-by-content": "search-navigate",
+    "inspect-file-metadata": "search-navigate",
+
+    # reproduce
+    "create-repro-script": "reproduce",
+    "run-repro-script": "reproduce",
+    "run-inline-snippet": "reproduce",
+
+    # implement
+    "edit-source": "implement",
+    "insert-source": "implement",
+    "apply-patch": "implement",
+    "create-file": "implement",
+
+    # verify
+    "run-test-suite": "verify",
+    "run-test-specific": "verify",
+    "create-test-script": "verify",
+    "run-verify-script": "verify",
+    "create-verify-script": "verify",
+    "edit-test-or-repro": "verify",
+    "run-custom-script": "verify",
+    "syntax-check": "verify",
+    "compile-build": "verify",
+
+    # git
+    "git-diff": "git",
+    "git-status-log": "git",
+    "git-stash": "git",
+
+    # infrastructure
+    "file-cleanup": "infrastructure",
+    "create-documentation": "infrastructure",
+    "start-service": "infrastructure",
+    "install-deps": "infrastructure",
+    "check-tool-exists": "infrastructure",
+
+    # failed
+    "search-keyword(failed)": "failed",
+    "read-via-bash(failed)": "failed",
+    "run-script(failed)": "failed",
+    "run-test-suite(failed)": "failed",
+    "bash-command(failed)": "failed",
+
+    # other
+    "submit": "other",
+    "empty": "other",
+    "echo": "other",
+    "bash-other": "other",
+    "undo-edit": "other",
+}
+
+
+def _load_json(path: str) -> dict:
+    with open(path, "rb") as f:
+        raw = f.read()
+    if orjson is not None:
+        return orjson.loads(raw)
+    return json.loads(raw.decode("utf-8"))
+
+
+def _safe_first_line(text: str) -> str:
+    return (text or "").split("\n", 1)[0]
+
+
+def _command_signature(action: str) -> str:
+    """Normalized command signature for sequence-level rerun detection."""
+    cmd = _strip_leading_env_and_timeout(_unwrap_command(action or ""))
+    head = _safe_first_line(cmd).lower().strip()
+    return re.sub(r"\s+", " ", head)
+
+
+def _extract_path(action_line: str) -> str:
+    """Extract target path token from str_replace_editor commands."""
+    try:
+        tokens = shlex.split(action_line)
+    except ValueError:
+        tokens = action_line.split()
+    return tokens[2] if len(tokens) >= 3 else ""
+
+
+def _basename(path: str) -> str:
+    p = (path or "").rstrip("/")
+    return os.path.basename(p) if p else ""
+
+
+def _has_no_extension_excluding_leading_dot(name: str) -> bool:
+    if not name:
         return False
-    path = parts[2]
-    # Directories: no file extension, or known dir patterns
-    if '--view_range' in action_line:
-        return False  # ranged view is always a file
-    basename = path.split('/')[-1]
-    # Has a file extension → file
-    if '.' in basename and not basename.startswith('.'):
-        return False
-    return True
+    check = name[1:] if name.startswith(".") else name
+    return "." not in check
 
 
-def _extract_bash_command(action):
-    """Extract the actual command from bash -lc wrapping."""
-    a = action.strip()
-    # Unwrap bash -lc "..." or bash -lc '...'
-    m = re.match(r'bash\s+-lc\s+["\'](.+)', a, re.DOTALL)
+def _contains_any(haystack: str, needles: list[str] | tuple[str, ...]) -> bool:
+    return any(n in haystack for n in needles)
+
+
+def _startswith_any(haystack: str, prefixes: list[str] | tuple[str, ...]) -> bool:
+    return any(haystack.startswith(p) for p in prefixes)
+
+
+def _strip_outer_shell_quotes(s: str) -> str:
+    s = s.strip()
+    if not s:
+        return s
+
+    # Handles: "...", '...', $'...', $"...", and common malformed suffixes like "..."}
+    m = re.match(r"^\$?([\"'])([\s\S]*)\1\}?$", s)
     if m:
-        return m.group(1).rstrip("\"'}")
-    # cd /app && ... 
-    if a.startswith('cd ') and '&&' in a:
-        return a.split('&&', 1)[1].strip()
-    return a
+        return m.group(2)
+
+    # Very common malformed wrapper from serialized tool calls: "...}
+    if s[0] in {"'", '"'} and s.endswith("}"):
+        return s[1:-1]
+
+    return s
 
 
-def _is_test_command(cmd):
-    """Check if a bash command is running a test suite."""
-    cl = cmd.lower()
-    return any(kw in cl for kw in [
-        'pytest', 'python -m pytest', 'go test', 'npm test',
-        'npx jest', 'mocha', 'python -m unittest',
-    ])
+def _unwrap_command(action: str) -> str:
+    """Unwrap bash -lc and leading cd/source wrappers."""
+    cmd = (action or "").strip()
+    for _ in range(6):
+        changed = False
+        s = cmd.strip()
+        s_lower = s.lower()
+
+        if s_lower.startswith("bash -lc"):
+            inner = s[8:].strip()  # len("bash -lc") == 8
+            cmd = _strip_outer_shell_quotes(inner)
+            changed = True
+
+        s = cmd.strip()
+        # Keep only command after first && for cd/source wrappers
+        if (s.startswith("cd ") or s.startswith("source ")) and "&&" in s:
+            cmd = s.split("&&", 1)[1].strip()
+            changed = True
+
+        if not changed:
+            break
+
+    return cmd.strip()
 
 
-def _is_search_command(cmd):
-    """Check if a bash command is searching/exploring."""
-    cl = cmd.lower()
-    return any(cl.lstrip().startswith(p) for p in [
-        'grep ', 'find ', 'rg ', 'ag ', 'ls ', 'ls\n',
-        'tree ', 'wc ', 'file ',
-    ]) or ('grep ' in cl and '|' in cl)
+def _strip_leading_env_and_timeout(cmd: str) -> str:
+    """Strip common wrappers (env assignments, timeout, set -e) for intent detection."""
+    s = cmd.strip()
+    for _ in range(8):
+        prev = s
+        s = re.sub(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)+", "", s)
+        s = re.sub(r"^env\s+", "", s)
+        s = re.sub(r"^timeout\s+\S+\s+", "", s)
+        s = re.sub(r"^set\s+-[A-Za-z]+(?:\s+-[A-Za-z]+)*\s*;\s*", "", s)
+        s = re.sub(r"^set\s+-o\s+\S+\s*;\s*", "", s)
+        if s == prev:
+            break
+    return s.strip()
 
 
-def _is_read_command(cmd):
-    """Check if a bash command is reading file contents."""
-    cl = cmd.lower().strip()
-    return any(cl.startswith(p) for p in [
-        'cat ', 'head ', 'tail ', 'sed -n', 'nl ', 'awk ',
-    ])
+def _is_test_runner_cmd(cmd_lower: str) -> bool:
+    return _contains_any(
+        cmd_lower,
+        (
+            "pytest",
+            "python -m pytest",
+            "go test",
+            "npm test",
+            "npx jest",
+            "mocha",
+            "python -m unittest",
+            "yarn test",
+        ),
+    )
 
 
-def _is_run_command(cmd):
-    """Check if a bash command runs a script/snippet."""
-    cl = cmd.lower().strip()
-    return any(cl.startswith(p) for p in [
-        'python ', 'python3 ', 'node ', 'go run',
-        'python -', 'python3 -',
-    ])
+def _is_search_cmd(cmd_lower: str) -> bool:
+    return _startswith_any(cmd_lower, ("grep", "rg ", "ag ", "find "))
 
 
-def _is_compile_check(cmd):
-    """Check if a bash command is a syntax/compile check."""
-    cl = cmd.lower()
-    return any(kw in cl for kw in [
-        'py_compile', 'compileall', 'node -c ',
-        'go build', 'go vet', 'make ',
-    ])
+def _is_read_cmd(cmd_lower: str) -> bool:
+    return _startswith_any(cmd_lower, ("cat ", "head ", "tail ", "sed -n", "nl ", "awk ", "ls "))
 
 
-def _is_error_obs(obs):
-    """Check if the observation indicates the command failed/errored."""
-    if not obs:
-        return False
-    o = obs[:500].lower()
-    return any(kw in o for kw in [
-        'syntax error', 'unexpected token', 'command not found',
-        "here-document at line", "unexpected `}'",
-        'invalid number of lines',
-        'invalid option',
-    ])
+def _is_script_cmd(cmd_lower: str) -> bool:
+    return _startswith_any(cmd_lower, ("python ", "python3 ", "node ", "go run "))
 
 
-def _get_run_target(cmd):
-    """Extract the script name from a run command."""
-    # python /app/repro.py → repro.py
-    # python test_edge_cases.py → test_edge_cases.py
-    cl = cmd.strip()
-    parts = cl.split()
+def _classify_script_name(script_name: str) -> str:
+    if _contains_any(script_name, ("repro", "reproduce", "demo")):
+        return "run-repro-script"
+    if _contains_any(script_name, ("test_", "verify", "check", "validate", "edge_case")):
+        return "run-verify-script"
+    if script_name:
+        return "run-custom-script"
+    return "run-inline-snippet"
+
+
+def _get_git_subcommand(cmd: str) -> str:
+    """Extract git subcommand, skipping flags such as -C <path>."""
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        parts = cmd.split()
+
+    if not parts or parts[0] != "git":
+        return ""
+
+    i = 1
+    while i < len(parts):
+        token = parts[i]
+        if token in {"-C", "-c", "--git-dir", "--work-tree"}:
+            i += 2
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        return token.lower()
+    return ""
+
+
+def _extract_script_filename(cmd: str) -> str:
+    """Extract named script filename from script-running commands."""
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        parts = cmd.split()
+
+    if len(parts) < 2:
+        return ""
+
+    exts = (".py", ".js", ".go", ".ts", ".mjs", ".cjs", ".sh")
     for p in parts[1:]:
-        if p.endswith('.py') or p.endswith('.js') or p.endswith('.go'):
-            return p.split('/')[-1].lower()
-        if p.startswith('-'):
+        if p.startswith("-"):
             continue
-        break
-    return ''
+        candidate = p.strip("'\"")
+        if candidate.lower().endswith(exts):
+            return os.path.basename(candidate).lower()
+
+    # Fallback: pick first token that looks like a path with extension
+    m = re.search(r"(?:^|\s)([^\s'\"]+\.(?:py|js|go|ts|mjs|cjs|sh))(?:\s|$)", cmd, re.I)
+    if m:
+        return os.path.basename(m.group(1)).lower()
+    return ""
 
 
-def _is_repro_filename(name):
-    return any(kw in name for kw in ['repro', 'reproduce', 'demo'])
+def classify_step(action: str, observation: str = "") -> str:
+    """Classify one trajectory step into deterministic intent label."""
+    action = action or ""
+    observation = observation or ""
+
+    action_line = _safe_first_line(action).strip()
+    action_line_lower = action_line.lower()
+
+    # Empty
+    if not action.strip():
+        return "empty"
+
+    # Submit
+    if action_line_lower.startswith("submit"):
+        return "submit"
+
+    # str_replace_editor view
+    if action_line_lower.startswith("str_replace_editor view"):
+        target = _extract_path(action_line)
+        base = _basename(target)
+        base_lower = base.lower()
+        obs_lower = observation.lower()
+
+        if "--view_range" in action_line_lower:
+            return "read-file-range"
+
+        if "files and directories" in obs_lower:
+            return "view-directory"
+
+        if _has_no_extension_excluding_leading_dot(base):
+            return "view-directory"
+
+        if TEST_FILE_RE.match(base_lower):
+            return "read-test-file"
+
+        if base_lower in CONFIG_FILES:
+            return "read-config-file"
+
+        if "too large to display" in obs_lower:
+            return "read-file-full(truncated)"
+
+        return "read-file-full"
+
+    # str_replace_editor create
+    if action_line_lower.startswith("str_replace_editor create"):
+        filename = _basename(_extract_path(action_line)).lower()
+
+        if _contains_any(filename, ("repro", "reproduce")):
+            return "create-repro-script"
+        if _contains_any(filename, ("test_", "test.py", "test.js", "test.go")):
+            return "create-test-script"
+        if _contains_any(filename, ("verify", "check", "validate", "edge_case")):
+            return "create-verify-script"
+        if _contains_any(filename, ("summary", "readme", "changes", "implementation")):
+            return "create-documentation"
+        return "create-file"
+
+    # str_replace_editor str_replace
+    if action_line_lower.startswith("str_replace_editor str_replace"):
+        filename = _basename(_extract_path(action_line)).lower()
+        if _contains_any(filename, ("test_", "repro", "verify", "check")):
+            return "edit-test-or-repro"
+        return "edit-source"
+
+    # str_replace_editor insert
+    if action_line_lower.startswith("str_replace_editor insert"):
+        return "insert-source"
+
+    # str_replace_editor undo_edit
+    if action_line_lower.startswith("str_replace_editor undo"):
+        return "undo-edit"
+
+    # Everything else: bash/direct commands
+    cmd = _unwrap_command(action)
+    cmd_for_match = _strip_leading_env_and_timeout(cmd)
+    cmd_match_lower = cmd_for_match.lower().strip()
+    cmd_head_lower = cmd_match_lower.split("\n", 1)[0].strip()
+    obs_lower_500 = observation[:500].lower()
+
+    # Failed shell command variants (classify by intended action)
+    if _contains_any(
+        obs_lower_500,
+        (
+            "syntax error",
+            "unexpected token",
+            "command not found",
+            "here-document at line",
+            "unexpected `}'",
+            "invalid number of lines",
+            "invalid option",
+            "broken pipe",
+        ),
+    ):
+        if _is_search_cmd(cmd_head_lower):
+            return "search-keyword(failed)"
+        if _is_test_runner_cmd(cmd_head_lower):
+            return "run-test-suite(failed)"
+        if _is_script_cmd(cmd_head_lower):
+            return "run-script(failed)"
+        if _is_read_cmd(cmd_head_lower):
+            return "read-via-bash(failed)"
+        return "bash-command(failed)"
+
+    # applypatch
+    if "applypatch" in cmd_head_lower:
+        return "apply-patch"
+
+    # Test suite
+    if _is_test_runner_cmd(cmd_head_lower):
+        if "::" in cmd_head_lower or " -k " in cmd_head_lower:
+            return "run-test-specific"
+        return "run-test-suite"
+
+    # Syntax / compile check
+    if _contains_any(cmd_head_lower, ("py_compile", "compileall", "node -c ")):
+        return "syntax-check"
+
+    if _startswith_any(cmd_head_lower, ("go build", "go vet", "make ")):
+        return "compile-build"
+
+    if _startswith_any(cmd_head_lower, ("npx tsc", "tsc ", "./node_modules/.bin/tsc")):
+        return "compile-build"
+
+    if _contains_any(
+        cmd_head_lower,
+        ("npm run build", "yarn build", "check-types", "lint:types", "npm run types"),
+    ):
+        return "compile-build"
+
+    # Search commands
+    if _startswith_any(cmd_head_lower, ("grep", "rg ", "ag ")):
+        return "search-keyword"
+
+    if _startswith_any(cmd_head_lower, ("find ",)):
+        if _contains_any(cmd_head_lower, ("grep", "xargs")):
+            return "search-files-by-content"
+        return "search-files-by-name"
+
+    # Read commands
+    if _startswith_any(cmd_head_lower, ("cat ", "head ", "tail ", "sed -n", "nl ", "awk ")):
+        return "read-via-bash"
+
+    # List / navigate
+    if _startswith_any(cmd_head_lower, ("ls", "tree ", "pwd")):
+        return "list-directory"
+
+    # Run python/node/go script
+    if _startswith_any(cmd_head_lower, ("python ", "python3 ", "node ", "go run ")):
+        # Inline snippets
+        if "-c " in cmd_for_match or "- <<" in cmd_for_match or "-e " in cmd_for_match:
+            if "node" in cmd_head_lower and "-c " in cmd_for_match.lower():
+                return "syntax-check"
+            return "run-inline-snippet"
+
+        return _classify_script_name(_extract_script_filename(cmd_for_match))
+
+    # Shell-invoked scripts, e.g. ./verify.sh, sh repro.sh
+    if _startswith_any(cmd_head_lower, ("./", "sh ", "bash ", "zsh ")):
+        return _classify_script_name(_extract_script_filename(cmd_for_match))
+
+    # Git (supports git -C /path ...)
+    git_sub = _get_git_subcommand(cmd_for_match)
+    if git_sub == "diff":
+        return "git-diff"
+    if git_sub in {"status", "show", "log"}:
+        return "git-status-log"
+    if git_sub == "stash":
+        return "git-stash"
+
+    # File management
+    if _startswith_any(cmd_head_lower, ("rm ", "mv ", "cp ", "chmod ")):
+        return "file-cleanup"
+
+    # Install / deps
+    if _contains_any(cmd_head_lower, ("pip install", "pip list", "npm install", "go get", "apt ")):
+        return "install-deps"
+
+    # Service management
+    if _contains_any(cmd_head_lower, ("redis-server", "redis-cli", "mongod", "sleep ")):
+        return "start-service"
+
+    # Check tool existence
+    if _startswith_any(cmd_head_lower, ("which ", "type ")):
+        return "check-tool-exists"
+
+    # Inspect metadata
+    if _startswith_any(cmd_head_lower, ("wc ", "file ", "stat ")):
+        return "inspect-file-metadata"
+
+    # Echo
+    if _startswith_any(cmd_head_lower, ("echo ", "printf ")):
+        return "echo"
+
+    return "bash-other"
 
 
-def _is_test_filename(name):
-    return any(kw in name for kw in [
-        'test_', '_test.', 'test.py', 'test.js', 'test.go',
-        'verify', 'check', 'validate', 'edge_case',
-    ])
+def classify_trajectory(trajectory: list[dict]) -> list[str]:
+    return [classify_step(step.get("action", ""), step.get("observation", "")) for step in trajectory]
 
 
-def _is_doc_filename(name):
-    return any(kw in name for kw in [
-        'summary', 'readme', 'changes', 'implementation',
-    ])
+def classify_trajectory_counts(trajectory: list[dict]) -> Counter:
+    c = Counter()
+    for step in trajectory:
+        c[classify_step(step.get("action", ""), step.get("observation", ""))] += 1
+    return c
 
 
-def classify_trajectory(trajectory):
-    """
-    Classify each step in a SWE-Agent trajectory into intent phases.
-    
-    Args:
-        trajectory: list of step dicts with 'action' and 'observation' keys
-    
-    Returns:
-        list of phase labels (one per step)
-    """
-    # First pass: find the index of the first source-code edit
-    first_edit_idx = None
-    edited_files = set()
-    
-    for i, step in enumerate(trajectory):
-        action = step['action'].strip()
-        fl = action.split('\n')[0].lower()
-        
-        if (fl.startswith('str_replace_editor str_replace') or 
-            fl.startswith('str_replace_editor insert') or
-            'applypatch' in fl):
-            # Extract target file
-            parts = action.split('\n')[0].split()
-            if fl.startswith('str_replace_editor'):
-                if len(parts) >= 3:
-                    target = parts[2]
-                    # Skip if it's editing a repro/test file the agent created
-                    fname = target.split('/')[-1].lower()
-                    if _is_repro_filename(fname) or _is_test_filename(fname) or _is_doc_filename(fname):
-                        continue
-                    if first_edit_idx is None:
-                        first_edit_idx = i
-                    edited_files.add(target)
+def to_hierarchical_intent(base_intent: str) -> str:
+    high = INTENT_TO_HIGH_LEVEL.get(base_intent, "other")
+    return f"{high}.{base_intent}"
+
+
+def classify_hierarchical_layer(base_intents: list[str]) -> list[str]:
+    return [to_hierarchical_intent(i) for i in base_intents]
+
+
+def classify_hierarchical_counts(base_intents: list[str]) -> Counter:
+    return Counter(classify_hierarchical_layer(base_intents))
+
+
+def classify_sequence_layer(trajectory: list[dict], base_intents: list[str]) -> list[str]:
+    """Second-layer deterministic sequence intents derived from base intents + nearby history."""
+    seq_labels: list[str] = []
+
+    seen_verify = False
+    seen_repro = False
+    edited_since_verify = False
+    edited_since_repro = False
+    prev_verify_sig = ""
+    prev_repro_sig = ""
+    prev_base = ""
+    edited_paths: set[str] = set()
+
+    for step, base_intent in zip(trajectory, base_intents):
+        action = step.get("action", "") or ""
+        action_line = _safe_first_line(action)
+        signature = _command_signature(action)
+
+        seq = "seq-none"
+
+        if base_intent in SEQUENCE_VERIFY_INTENTS:
+            if seen_verify and (not edited_since_verify) and signature and signature == prev_verify_sig:
+                seq = "seq-verify-rerun-same-command"
+            elif edited_since_verify:
+                seq = "seq-verify-after-edit"
+            elif seen_verify and not edited_since_verify:
+                seq = "seq-verify-rerun-no-edit"
+
+            seen_verify = True
+            edited_since_verify = False
+            prev_verify_sig = signature
+
+        elif base_intent in SEQUENCE_REPRO_INTENTS:
+            if seen_repro and (not edited_since_repro) and signature and signature == prev_repro_sig:
+                seq = "seq-repro-rerun-same-command"
+            elif edited_since_repro:
+                seq = "seq-repro-after-edit"
+            elif seen_repro and not edited_since_repro:
+                seq = "seq-repro-rerun-no-edit"
+
+            seen_repro = True
+            edited_since_repro = False
+            prev_repro_sig = signature
+
+        elif base_intent in SEQUENCE_EDIT_INTENTS:
+            if prev_base in SEQUENCE_FAILED_VERIFY_INTENTS:
+                seq = "seq-edit-after-failed-verify"
+
+            edited_since_verify = True
+            edited_since_repro = True
+
+            path = _extract_path(action_line)
+            if path:
+                edited_paths.add(path)
+
+        elif base_intent in SEQUENCE_READ_INTENTS:
+            if prev_base in SEQUENCE_FAILED_VERIFY_INTENTS:
+                seq = "seq-diagnose-read-after-failed-verify"
             else:
-                # applypatch
-                if first_edit_idx is None:
-                    first_edit_idx = i
-    
-    # If no edit found, everything is pre-implementation
-    if first_edit_idx is None:
-        first_edit_idx = len(trajectory)
-    
-    # Second pass: classify each step
-    labels = []
-    for i, step in enumerate(trajectory):
-        action = step['action'].strip()
-        obs = step.get('observation', '') or ''
-        fl = action.split('\n')[0]
-        fl_lower = fl.lower()
-        before_edit = i < first_edit_idx
-        
-        # ── Empty action ──
-        if not action.strip():
-            labels.append('!')
-            continue
-        
-        # ── Submit ──
-        if fl_lower.startswith('submit'):
-            labels.append('S')
-            continue
-        
-        # ── Check for error observation on bash commands ──
-        if _is_error_obs(obs) and not fl_lower.startswith('str_replace_editor'):
-            labels.append('!')
-            continue
-        
-        # ── str_replace_editor view ──
-        if fl_lower.startswith('str_replace_editor view'):
-            if _is_directory_target(fl):
-                labels.append('O')
-            else:
-                # File view: is it reviewing own edits?
-                parts = fl.split()
-                target = parts[2] if len(parts) >= 3 else ''
-                if not before_edit and target in edited_files:
-                    labels.append('V')  # reviewing own work
-                else:
-                    labels.append('R')
-            continue
-        
-        # ── str_replace_editor create ──
-        if fl_lower.startswith('str_replace_editor create'):
-            parts = fl.split()
-            target = parts[2] if len(parts) >= 3 else ''
-            fname = target.split('/')[-1].lower()
-            
-            if _is_doc_filename(fname):
-                labels.append('V')  # documentation is post-impl activity
-            elif _is_repro_filename(fname):
-                labels.append('D' if before_edit else 'V')
-            elif _is_test_filename(fname):
-                labels.append('V')
-            elif any(target.startswith(p) for p in ['/app/src/', '/app/lib/', '/app/qutebrowser/']):
-                labels.append('I')
-            else:
-                # Generic create — repro if before edit, verify if after
-                labels.append('D' if before_edit else 'V')
-            continue
-        
-        # ── str_replace_editor str_replace / insert ──
-        if (fl_lower.startswith('str_replace_editor str_replace') or
-            fl_lower.startswith('str_replace_editor insert')):
-            parts = fl.split()
-            target = parts[2] if len(parts) >= 3 else ''
-            fname = target.split('/')[-1].lower()
-            
-            if _is_repro_filename(fname) or _is_test_filename(fname) or _is_doc_filename(fname):
-                labels.append('V')
-            else:
-                labels.append('I')
-            continue
-        
-        # ── str_replace_editor undo_edit ──
-        if fl_lower.startswith('str_replace_editor undo'):
-            labels.append('I')
-            continue
-        
-        # ── Everything else is bash or direct commands ──
-        cmd = _extract_bash_command(action)
-        cmd_lower = cmd.lower().strip()
-        
-        # applypatch
-        if 'applypatch' in cmd_lower:
-            labels.append('I')
-            continue
-        
-        # Test suite
-        if _is_test_command(cmd):
-            labels.append('V')
-            continue
-        
-        # Compile/build check
-        if _is_compile_check(cmd):
-            labels.append('V')
-            continue
-        
-        # Run a script
-        if _is_run_command(cmd):
-            target_name = _get_run_target(cmd)
-            if _is_repro_filename(target_name):
-                labels.append('D' if before_edit else 'V')
-            elif _is_test_filename(target_name):
-                labels.append('V')
-            else:
-                # Inline snippet (python -, python -c, node -e) or unknown script
-                labels.append('D' if before_edit else 'V')
-            continue
-        
-        # Search/explore commands
-        if _is_search_command(cmd):
-            labels.append('O')
-            continue
-        
-        # Reading commands (cat, head, tail, sed -n)
-        if _is_read_command(cmd):
-            labels.append('R')
-            continue
-        
-        # Git commands
-        if cmd_lower.strip().startswith('git '):
-            labels.append('O' if before_edit else 'V')
-            continue
-        
-        # File management (rm, mv, cp, chmod)
-        if any(cmd_lower.strip().startswith(p) for p in ['rm ', 'mv ', 'cp ', 'chmod ']):
-            labels.append('V')
-            continue
-        
-        # Install/setup
-        if any(kw in cmd_lower for kw in ['pip ', 'npm ', 'go get', 'apt ']):
-            labels.append('O')
-            continue
-        
-        # Fallback: before edit = orient, after = verify
-        labels.append('O' if before_edit else 'V')
-    
-    return labels
+                path = _extract_path(action_line)
+                if path and path in edited_paths:
+                    seq = "seq-reread-edited-file"
+
+        elif base_intent in SEQUENCE_SEARCH_INTENTS:
+            if prev_base in SEQUENCE_FAILED_VERIFY_INTENTS:
+                seq = "seq-diagnose-search-after-failed-verify"
+
+        elif base_intent == "submit" and seen_verify:
+            seq = "seq-submit-after-verify"
+
+        seq_labels.append(seq)
+        prev_base = base_intent
+
+    return seq_labels
 
 
-def classify_file(traj_path):
-    """Load a trajectory file and return phase sequence."""
-    with open(traj_path) as f:
-        data = json.load(f)
-    labels = classify_trajectory(data['trajectory'])
-    return ''.join(labels), data
+def classify_sequence_counts(trajectory: list[dict], base_intents: list[str]) -> Counter:
+    return Counter(classify_sequence_layer(trajectory, base_intents))
 
 
-if __name__ == '__main__':
-    import sys
-    import glob
-    
-    base = '/Users/srihari/work/nilenso/swe-bench-pro-analysis/data'
-    
-    if len(sys.argv) > 1:
-        # Classify a specific file
-        seq, data = classify_file(sys.argv[1])
-        print(seq)
+def classify_file(traj_path: str) -> tuple[list[str], dict]:
+    data = _load_json(traj_path)
+    intents = classify_trajectory(data.get("trajectory", []))
+    return intents, data
+
+
+def summarize_file(traj_path: str) -> Counter:
+    data = _load_json(traj_path)
+    return classify_trajectory_counts(data.get("trajectory", []))
+
+
+def _collect_traj_files(paths: list[str]) -> list[Path]:
+    traj_files: list[Path] = []
+    for p in paths:
+        path = Path(p)
+        if path.is_file() and path.suffix == ".traj":
+            traj_files.append(path)
+        elif path.is_dir():
+            traj_files.extend(sorted(path.glob("*/*.traj")))
+    return sorted(traj_files)
+
+
+def _classify_file_summary(task: tuple[str, bool, bool]) -> tuple[str, int, str, dict[str, int], dict[str, int], dict[str, int]]:
+    traj_path, include_sequence, include_hierarchical = task
+    data = _load_json(traj_path)
+    trajectory = data.get("trajectory", [])
+    base_intents = classify_trajectory(trajectory)
+    base_counts = Counter(base_intents)
+
+    sequence_counts: Counter = Counter()
+    if include_sequence:
+        sequence_counts = classify_sequence_counts(trajectory, base_intents)
+
+    hierarchical_counts: Counter = Counter()
+    if include_hierarchical:
+        hierarchical_counts = classify_hierarchical_counts(base_intents)
+
+    exit_status = data.get("info", {}).get("exit_status", "")
+    return (
+        traj_path,
+        len(trajectory),
+        exit_status,
+        dict(base_counts),
+        dict(sequence_counts),
+        dict(hierarchical_counts),
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Classify SWE-Agent trajectory steps into deterministic intents")
+    parser.add_argument("paths", nargs="+", help=".traj files or directories containing .traj files")
+    parser.add_argument("--show", type=int, default=0, help="Show first N step classifications per file (sequential mode)")
+    parser.add_argument("--sequence-layer", action="store_true", help="Compute sequence-level intent labels on top of base intents")
+    parser.add_argument("--hierarchical-layer", action="store_true", help="Compute high-level dot-notation intents (e.g. read-code.read-file-full)")
+    default_workers = min(8, os.cpu_count() or 1)
+    parser.add_argument("--workers", type=int, default=default_workers, help=f"Parallel workers for per-file classification (default: {default_workers})")
+    parser.add_argument("--quiet", action="store_true", help="Only print aggregate counts and timing")
+    parser.add_argument("--json-output", default="", help="Write aggregate intent counts JSON to path")
+    args = parser.parse_args()
+
+    traj_files = _collect_traj_files(args.paths)
+    if not traj_files:
+        raise SystemExit("No .traj files found")
+
+    if args.show > 0 and args.workers > 1:
+        print("note: --show requested; forcing --workers=1 for deterministic step display")
+        args.workers = 1
+
+    total = Counter()
+    total_sequence = Counter()
+    total_hierarchical = Counter()
+    t0 = time.perf_counter()
+
+    if args.workers <= 1:
+        for tf in traj_files:
+            data = _load_json(str(tf))
+            trajectory = data.get("trajectory", [])
+            intents = classify_trajectory(trajectory)
+            c = Counter(intents)
+            total.update(c)
+
+            seq_labels: list[str] = []
+            if args.sequence_layer:
+                seq_labels = classify_sequence_layer(trajectory, intents)
+                total_sequence.update(seq_labels)
+
+            hier_labels: list[str] = []
+            if args.hierarchical_layer:
+                hier_labels = classify_hierarchical_layer(intents)
+                total_hierarchical.update(hier_labels)
+
+            if not args.quiet:
+                print(f"\n{tf}")
+                print(f"steps={len(intents)}  exit={data.get('info', {}).get('exit_status', '')}")
+                print("top_intents:", dict(c.most_common(10)))
+                if args.hierarchical_layer:
+                    print("top_hierarchical:", dict(Counter(hier_labels).most_common(10)))
+                if args.sequence_layer:
+                    seq_counts = Counter(seq_labels)
+                    print("top_sequence:", dict(seq_counts.most_common(10)))
+
+            if args.show > 0:
+                for i, (step, intent) in enumerate(zip(trajectory, intents), start=1):
+                    if i > args.show:
+                        break
+                    action_line = _safe_first_line(step.get("action", ""))
+                    if args.sequence_layer and args.hierarchical_layer:
+                        seq = seq_labels[i - 1]
+                        hier = hier_labels[i - 1]
+                        print(f"  {i:>3}  {intent:<28} {hier:<44} {seq:<34} {action_line[:90]}")
+                    elif args.sequence_layer:
+                        seq = seq_labels[i - 1]
+                        print(f"  {i:>3}  {intent:<28} {seq:<36} {action_line[:120]}")
+                    elif args.hierarchical_layer:
+                        hier = hier_labels[i - 1]
+                        print(f"  {i:>3}  {intent:<28} {hier:<44} {action_line[:110]}")
+                    else:
+                        print(f"  {i:>3}  {intent:<28} {action_line[:140]}")
     else:
-        # Demo: classify the ansible task for both models
-        inst = 'instance_ansible__ansible-0ea40e09d1b35bcb69ff4d9cecf3d0defa4b36e8-v30a923fb5c164d6cd18280c02422f75e611e8fb2'
-        
-        for model in ['gpt5', 'claude45']:
-            traj_file = glob.glob(f'{base}/{model}/traj/{inst}/*.traj')[0]
-            seq, data = classify_file(traj_file)
-            n = len(data['trajectory'])
-            print(f"\n{model} ({n} steps): {seq}")
-            
-            # Show step-by-step
-            for i, (step, label) in enumerate(zip(data['trajectory'], seq)):
-                fl = step['action'].strip().split('\n')[0][:80]
-                print(f"  {label} {i:2d}  {fl}")
+        max_workers = min(max(args.workers, 1), os.cpu_count() or 1)
+        tasks = [(str(p), bool(args.sequence_layer), bool(args.hierarchical_layer)) for p in traj_files]
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            for traj_path, steps, exit_status, counts, sequence_counts, hierarchical_counts in ex.map(_classify_file_summary, tasks, chunksize=16):
+                c = Counter(counts)
+                total.update(c)
+                if args.sequence_layer:
+                    total_sequence.update(sequence_counts)
+                if args.hierarchical_layer:
+                    total_hierarchical.update(hierarchical_counts)
+                if not args.quiet:
+                    print(f"\n{traj_path}")
+                    print(f"steps={steps}  exit={exit_status}")
+                    print("top_intents:", dict(c.most_common(10)))
+                    if args.hierarchical_layer:
+                        print("top_hierarchical:", dict(Counter(hierarchical_counts).most_common(10)))
+                    if args.sequence_layer:
+                        print("top_sequence:", dict(Counter(sequence_counts).most_common(10)))
+
+    elapsed = time.perf_counter() - t0
+    total_steps = sum(total.values())
+
+    print("\n=== aggregate ===")
+    print(dict(total.most_common()))
+
+    high_level_counts = Counter()
+    if args.hierarchical_layer:
+        print("\n=== hierarchical aggregate ===")
+        print(dict(total_hierarchical.most_common()))
+        for label, n in total_hierarchical.items():
+            high_level_counts[label.split(".", 1)[0]] += n
+        print("\n=== high-level aggregate ===")
+        print(dict(high_level_counts.most_common()))
+
+    if args.sequence_layer:
+        print("\n=== sequence aggregate ===")
+        print(dict(total_sequence.most_common()))
+    print(f"files={len(traj_files)} steps={total_steps} elapsed_sec={elapsed:.3f}")
+
+    if args.json_output:
+        payload = {
+            "files": len(traj_files),
+            "steps": total_steps,
+            "elapsed_sec": elapsed,
+            "intents": dict(total.most_common()),
+        }
+        if args.hierarchical_layer:
+            payload["hierarchical_intents"] = dict(total_hierarchical.most_common())
+            payload["high_level_categories"] = dict(high_level_counts.most_common())
+        if args.sequence_layer:
+            payload["sequence_intents"] = dict(total_sequence.most_common())
+        with open(args.json_output, "w") as f:
+            json.dump(payload, f, indent=2)
+        print(f"wrote {args.json_output}")
+
+
+if __name__ == "__main__":
+    main()
