@@ -41,15 +41,15 @@ LETTER_TO_NAME = {v: k for k, v in HIGH_LEVEL_LETTER.items()}
 
 # Colors keyed by the short name (not letter)
 HIGH_LEVEL_COLORS = {
-    "read": "#6cb6ff",
-    "search": "#f0883e",
-    "reproduce": "#bc8cff",
-    "edit": "#3fb950",
-    "verify": "#f778ba",
-    "git": "#e0c745",
-    "housekeeping": "#39c5cf",
-    "failed": "#f85149",
-    "other": "#545d68",
+    "read": "#5a7d9a",
+    "search": "#b07040",
+    "reproduce": "#7a6a9a",
+    "edit": "#4a8a5a",
+    "verify": "#a0607a",
+    "git": "#8a7a40",
+    "housekeeping": "#4a8a8a",
+    "failed": "#a05050",
+    "other": "#888",
 }
 # Also keyed by letter for transition matrix rendering
 LETTER_COLORS = {HIGH_LEVEL_LETTER[k]: v for k, v in HIGH_LEVEL_COLORS.items()}
@@ -78,9 +78,28 @@ def collect_files(data_root: Path) -> list[tuple[str, Path]]:
     return out
 
 
+CACHE_DIR = Path(__file__).parent.parent / ".cache" / "analytics"
+
+
+def _cache_key(path_str: str) -> str:
+    """Fast cache key from file path, size, and mtime."""
+    st = os.stat(path_str)
+    return f"{path_str}:{st.st_size}:{int(st.st_mtime)}"
+
+
 def _process_one_file(args: tuple[str, str]) -> dict:
     """Process a single .traj file. Top-level function for pickling."""
     model, path_str = args
+
+    # Check cache
+    import hashlib
+    key = hashlib.md5(_cache_key(path_str).encode()).hexdigest()
+    cache_path = CACHE_DIR / f"{key}.json"
+    if cache_path.exists():
+        cached = json.loads(cache_path.read_bytes())
+        cached["model"] = model
+        return cached
+
     data = ci._load_json(path_str)
     trajectory = data.get("trajectory", [])
     if not trajectory:
@@ -113,8 +132,7 @@ def _process_one_file(args: tuple[str, str]) -> dict:
                 counts_in_bin.append(segment.count(letter) / len(segment) if segment else 0.0)
             phase[letter] = counts_in_bin
 
-    return {
-        "model": model,
+    result = {
         "empty": False,
         "high_c": dict(high_c),
         "low_c": dict(low_c),
@@ -123,6 +141,69 @@ def _process_one_file(args: tuple[str, str]) -> dict:
         "steps": len(base_intents),
         "phase": phase,
     }
+
+    # Write cache
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(result))
+    except OSError:
+        pass
+
+    result["model"] = model
+    return result
+
+
+INTENT_DISPLAY_NAMES = {
+    # read
+    "read-file-full": "view full file",
+    "read-file-range": "view line range",
+    "read-file-full(truncated)": "view file (truncated)",
+    "read-test-file": "view test file",
+    "read-config-file": "view config file",
+    "read-via-bash": "cat / head / tail",
+    # search
+    "view-directory": "browse directory",
+    "list-directory": "ls / tree / pwd",
+    "search-keyword": "grep for pattern",
+    "search-files-by-name": "find files by name",
+    "search-files-by-content": "search file contents",
+    "inspect-file-metadata": "file metadata (wc/stat)",
+    # reproduce
+    "create-repro-script": "write repro script",
+    "run-repro-script": "run repro script",
+    "run-inline-snippet": "run one-liner (python -c, etc.)",
+    # edit
+    "edit-source": "edit source code",
+    "insert-source": "insert into source",
+    "apply-patch": "apply patch",
+    "create-file": "create new file",
+    # verify
+    "run-test-suite": "run full test suite",
+    "run-test-specific": "run targeted test (-k / ::)",
+    "create-test-script": "write test file",
+    "run-verify-script": "run verification script",
+    "create-verify-script": "write verification script",
+    "edit-test-or-repro": "edit test or repro file",
+    "run-custom-script": "run custom script",
+    "syntax-check": "syntax check",
+    "compile-build": "compile / build",
+    # git
+    "git-diff": "git diff",
+    "git-status-log": "git status / log / show",
+    "git-stash": "git stash",
+    # housekeeping
+    "file-cleanup": "rm / mv / cp files",
+    "create-documentation": "write docs file",
+    "start-service": "start service (redis, etc.)",
+    "install-deps": "install dependencies",
+    "check-tool-exists": "check tool exists",
+    # other
+    "submit": "submit patch",
+    "empty": "empty action (timeout)",
+    "echo": "echo / printf",
+    "bash-other": "other shell command",
+    "undo-edit": "undo edit",
+}
 
 
 def _load_intent_descriptions() -> dict[str, str]:
@@ -245,6 +326,7 @@ def build_payload(data_root: Path) -> dict:
         "name_colors": HIGH_LEVEL_COLORS,
         "intent_to_category": dict(ci.INTENT_TO_HIGH_LEVEL),
         "intent_descriptions": _load_intent_descriptions(),
+        "intent_display_names": INTENT_DISPLAY_NAMES,
     }
 
 
@@ -259,47 +341,47 @@ def render_html(payload: dict) -> str:
   <title>GPT-5 vs Claude 4.5 — Trajectory Analytics</title>
   <style>
     :root {{
-      --bg: #0b0f14;
-      --panel: #121922;
-      --muted: #9fb0c0;
-      --text: #e8eef5;
-      --accent: #6cb6ff;
-      --border: #2a3645;
-      --gpt: #f0883e;
-      --claude: #6cb6ff;
+      --bg: #fffff8;
+      --panel: #fffff8;
+      --muted: #777;
+      --text: #333;
+      --accent: #5a7d9a;
+      --border: #ddd;
+      --gpt: #b07040;
+      --claude: #5a7d9a;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
-      font-family: Inter, system-ui, -apple-system, sans-serif;
+      font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.6;
     }}
-    .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
-    h1 {{ font-size: 28px; margin-bottom: 6px; }}
-    .subtitle {{ color: var(--muted); font-size: 14px; margin-bottom: 30px; }}
+    .container {{ max-width: 1100px; margin: 0 auto; padding: 24px 20px; }}
+    h1 {{ font-size: 24px; margin-bottom: 4px; font-weight: 400; letter-spacing: -0.3px; }}
+    .subtitle {{ color: var(--muted); font-size: 14px; margin-bottom: 36px; font-style: italic; }}
     h2 {{
-      font-size: 18px;
-      margin: 40px 0 6px 0;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
+      font-size: 16px;
+      font-weight: 400;
+      font-style: italic;
+      margin: 44px 0 6px 0;
+      padding-top: 22px;
+      border-top: 1px solid #e0e0e0;
+      color: var(--text);
     }}
-    .chart-desc {{ color: var(--muted); font-size: 13px; margin-bottom: 14px; }}
+    .chart-desc {{ color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }}
     .legend {{
-      display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px;
+      display: flex; gap: 20px; margin-bottom: 16px; font-size: 12.5px;
     }}
     .legend-item {{
       display: flex; align-items: center; gap: 6px;
     }}
     .legend-swatch {{
-      width: 14px; height: 14px; border-radius: 3px;
+      width: 12px; height: 12px; border-radius: 2px;
     }}
     .chart-wrapper {{
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 10px;
+      padding: 16px 0;
+      margin-bottom: 6px;
       overflow-x: auto;
     }}
     canvas {{ display: block; }}
@@ -313,8 +395,8 @@ def render_html(payload: dict) -> str:
       margin-bottom: 10px;
     }}
     .heatmap-label {{
-      display: flex; align-items: center; color: var(--muted);
-      font-family: ui-monospace, monospace;
+      display: flex; align-items: center; color: var(--text);
+      font-size: 11px;
     }}
     .heatmap-cell {{
       height: 28px;
@@ -330,13 +412,11 @@ def render_html(payload: dict) -> str:
     }}
     .model-tag {{
       display: inline-block;
-      padding: 1px 8px;
-      border-radius: 999px;
       font-size: 12px;
-      font-weight: 600;
+      font-style: italic;
     }}
-    .model-tag.gpt {{ background: rgba(240,136,62,0.2); color: var(--gpt); }}
-    .model-tag.claude {{ background: rgba(108,182,255,0.2); color: var(--claude); }}
+    .model-tag.gpt {{ color: var(--gpt); }}
+    .model-tag.claude {{ color: var(--claude); }}
 
     .side-by-side {{
       display: grid;
@@ -348,7 +428,7 @@ def render_html(payload: dict) -> str:
     }}
     .side-by-side .chart-wrapper {{ margin-bottom: 0; }}
     .side-label {{
-      font-size: 14px; font-weight: 600; margin-bottom: 10px;
+      font-size: 13px; font-style: italic; margin-bottom: 10px; color: var(--text);
     }}
 
     /* Dumbbell chart */
@@ -358,12 +438,11 @@ def render_html(payload: dict) -> str:
       gap: 8px;
       align-items: center;
       padding: 4px 0;
-      border-bottom: 1px solid #1a2230;
+      border-bottom: 1px solid #eee;
     }}
     .dumbbell-row:last-child {{ border-bottom: none; }}
     .dumbbell-label {{
       text-align: right;
-      font-family: ui-monospace, monospace;
       font-size: 12px;
       color: var(--text);
     }}
@@ -390,8 +469,7 @@ def render_html(payload: dict) -> str:
     .dumbbell-val {{
       position: absolute;
       top: 2px;
-      font-family: ui-monospace, monospace;
-      font-size: 11px;
+      font-size: 10px;
       white-space: nowrap;
     }}
     .dumbbell-header {{
@@ -411,84 +489,67 @@ def render_html(payload: dict) -> str:
     .dumbbell-scale-tick {{
       position: absolute;
       top: 0;
-      font-size: 10px;
+      font-size: 9px;
       color: var(--muted);
-      font-family: ui-monospace, monospace;
       transform: translateX(-50%);
     }}
 
-    /* Heat table */
-    .heat-table {{
+    /* Paired bar table */
+    .paired-table {{
       width: 100%;
       border-collapse: collapse;
-      font-family: ui-monospace, monospace;
-      font-size: 12px;
+      font-size: 12.5px;
     }}
-    .heat-table th {{
-      text-align: right;
+    .paired-table th {{
       padding: 4px 10px;
       font-size: 11px;
-      color: var(--muted);
       font-weight: 400;
-      border-bottom: 1px solid var(--border);
+      font-style: italic;
+      color: var(--muted);
     }}
-    .heat-table th.col-gpt {{ color: var(--gpt); font-weight: 600; }}
-    .heat-table th.col-claude {{ color: var(--claude); font-weight: 600; }}
-    .heat-table td {{
-      padding: 3px 0;
-      border-bottom: 1px solid #1a2230;
+    .paired-table td {{
+      padding: 0;
     }}
-    .heat-table td.intent-name {{
+    .paired-table tr.paired-row {{
+      border-bottom: 8px solid transparent;
+    }}
+    .paired-table tr.paired-row.zebra td {{
+      background: rgba(0,0,0,0.015);
+    }}
+    .paired-table td.paired-name {{
       text-align: right;
       padding-right: 12px;
       color: var(--text);
-      width: 200px;
+      white-space: nowrap;
+      width: 1%;
+      vertical-align: middle;
     }}
-    .heat-table td.bar-cell {{
-      width: 25%;
-      padding: 3px 4px;
+    .paired-table td.paired-bars {{
+      padding: 4px 4px;
     }}
-    .heat-table .bar-wrap {{
-      position: relative;
-      height: 20px;
+    .paired-bar-row {{
       display: flex;
       align-items: center;
+      height: 13px;
+      gap: 4px;
     }}
-    .heat-table .bar-bg {{
-      position: absolute;
-      top: 1px;
-      height: 18px;
-      border-radius: 3px;
-      opacity: 0.7;
+    .paired-bar {{
+      height: 13px;
+      border-radius: 2px;
+      opacity: 0.8;
     }}
-    .heat-table .bar-val {{
-      position: relative;
-      z-index: 1;
-      padding: 0 6px;
-      font-size: 11px;
-      color: var(--text);
-    }}
-    .heat-table .bar-cell.gpt .bar-wrap {{
-      justify-content: flex-end;
-    }}
-    .heat-table .bar-cell.gpt .bar-bg {{
-      right: 0;
-    }}
-    .heat-table .bar-cell.claude .bar-bg {{
-      left: 0;
-    }}
-    .heat-table .intent-desc {{
-      font-family: Inter, system-ui, sans-serif;
-      font-size: 11px;
+    .paired-bar-val {{
+      font-size: 9.5px;
+      min-width: 24px;
       color: var(--muted);
-      font-weight: 400;
-      margin-top: 1px;
     }}
-    .heat-table .cat-header td {{
-      padding: 10px 0 4px 0;
-      border-bottom: 1px solid var(--border);
-      font-weight: 600;
-      font-size: 12px;
+    .paired-table .cat-header td {{
+      padding: 14px 0 4px 0;
+      font-weight: 400;
+      font-style: italic;
+      font-size: 13px;
+      color: var(--text);
+      letter-spacing: 0.3px;
     }}
 
     /* Stacked area legend */
@@ -497,8 +558,7 @@ def render_html(payload: dict) -> str:
       flex-wrap: wrap;
       gap: 12px 18px;
       margin-top: 10px;
-      font-size: 12px;
-      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
       color: var(--text);
     }}
     .stacked-legend .item {{
@@ -570,6 +630,10 @@ def render_html(payload: dict) -> str:
     <canvas id="highChart" height="300"></canvas>
   </div>
 
+  <div class="chart-wrapper" style="margin-top:12px">
+    <div id="highPaired"></div>
+  </div>
+
   <h2>2. Low-Level Intent Differences</h2>
   <p class="chart-desc">Per 100 steps, how many times does each model perform this action? <span style="color:var(--gpt)">Orange dot</span> = GPT-5, <span style="color:var(--claude)">blue dot</span> = Claude 4.5. The bar between dots is the gap. Sorted by largest gap within each category.</p>
   <div class="chart-wrapper">
@@ -578,6 +642,11 @@ def render_html(payload: dict) -> str:
 
   <h2>2b. Intent Comparison Table</h2>
   <p class="chart-desc">Bar width = frequency per 100 steps. Compare bar lengths within each row to spot differences; compare across rows to see which intents dominate overall.</p>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:13px;color:var(--muted)">
+    <label for="minFilter">Min frequency to show:</label>
+    <input type="range" id="minFilter" min="0" max="10" step="0.5" value="2" style="width:200px" />
+    <span id="minFilterVal" style="font-family:ui-monospace,monospace;color:var(--text);min-width:20px">2</span>
+  </div>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
@@ -598,15 +667,15 @@ def render_html(payload: dict) -> str:
     <div class="side-label" style="margin-bottom:12px">Difference (GPT &minus; Claude)</div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin-bottom:14px;color:var(--muted)">
       <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:#f0883e"></div>
+        <div style="width:32px;height:16px;border-radius:3px;background:var(--gpt)"></div>
         <span>GPT does this transition more</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:#6cb6ff"></div>
+        <div style="width:32px;height:16px;border-radius:3px;background:var(--claude)"></div>
         <span>Claude does this transition more</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <div style="width:32px;height:16px;border-radius:3px;background:#333"></div>
+        <div style="width:32px;height:16px;border-radius:3px;background:#ccc"></div>
         <span>~equal</span>
       </div>
       <div><span style="color:var(--text)">Brighter</span> = larger gap &nbsp; <span style="color:var(--text)">Values</span> = percentage point difference</div>
@@ -678,10 +747,10 @@ function getCtx(id) {{
   return {{ canvas: c, ctx: c.getContext('2d'), w: c.width, h: c.height }};
 }}
 
-const GPT_COLOR = '#f0883e';
-const CLAUDE_COLOR = '#6cb6ff';
-const MUTED = '#546170';
-const TEXT = '#c8d4df';
+const GPT_COLOR = '#c67a2e';
+const CLAUDE_COLOR = '#4a7fb5';
+const MUTED = '#6b7280';
+const TEXT = '#1a1a1a';
 
 // Names for display (everywhere except transition matrices)
 const CATEGORY_NAMES = ['read','search','reproduce','edit','verify','git','housekeeping'];
@@ -783,6 +852,57 @@ const gptHigh = highLabels.map(l => D.high_proportions.gpt5[l] || 0);
 const claudeHigh = highLabels.map(l => D.high_proportions.claude45[l] || 0);
 drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
 
+// 1b. High-level paired bars
+(function() {{
+  const el = document.getElementById('highPaired');
+  const cats = CATEGORY_NAMES;
+  const maxVal = Math.max(...cats.map(c => Math.max(
+    D.high_proportions.gpt5[c] || 0,
+    D.high_proportions.claude45[c] || 0
+  )));
+
+  function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
+
+  let html = `<table class="paired-table">
+    <thead><tr>
+      <th></th>
+      <th style="text-align:left;padding-left:4px">
+        <span style="color:${{CLAUDE_COLOR}}">Claude</span>
+        <span style="color:var(--muted);padding:0 6px">/</span>
+        <span style="color:${{GPT_COLOR}}">GPT</span>
+        <span style="color:var(--muted);font-weight:400;padding-left:8px">% of steps</span>
+      </th>
+    </tr></thead><tbody>`;
+
+  let rowIdx = 0;
+  for (const cat of cats) {{
+    const g = (D.high_proportions.gpt5[cat] || 0) * 100;
+    const c = (D.high_proportions.claude45[cat] || 0) * 100;
+    const gap = Math.abs(g - c);
+    const gBold = g > c && gap >= 0.3 ? 'font-weight:700' : '';
+    const cBold = c > g && gap >= 0.3 ? 'font-weight:700' : '';
+    const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
+
+    html += `<tr class="paired-row${{zebra}}">
+      <td class="paired-name">${{cat}}</td>
+      <td class="paired-bars">
+        <div class="paired-bar-row">
+          <div class="paired-bar" style="width:${{barPct(c / 100)}}%;background:${{CLAUDE_COLOR}}"></div>
+          <span class="paired-bar-val" style="color:${{CLAUDE_COLOR}};${{cBold}}">${{c.toFixed(1)}}</span>
+        </div>
+        <div class="paired-bar-row">
+          <div class="paired-bar" style="width:${{barPct(g / 100)}}%;background:${{GPT_COLOR}}"></div>
+          <span class="paired-bar-val" style="color:${{GPT_COLOR}};${{gBold}}">${{g.toFixed(1)}}</span>
+        </div>
+      </td>
+    </tr>`;
+    rowIdx++;
+  }}
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}})();
+
 // 2. Low-level dumbbell chart, grouped by category
 (function() {{
   const el = document.getElementById('lowDumbbell');
@@ -796,7 +916,7 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
     const c = (D.low_proportions.claude45[intent] || 0) * 100;
     const cat = catMap[intent] || '?';
     return {{ intent, g, c, gap: Math.abs(g - c), cat }};
-  }});
+  }}).filter(r => r.g >= 1 || r.c >= 1);
 
   // Group by category, sort by gap within each
   const grouped = {{}};
@@ -834,10 +954,8 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
   let prevCat = '';
   for (const r of sorted) {{
     if (r.cat !== prevCat) {{
-      const catName = r.cat;
-      const catColor = NAME_COLORS[r.cat] || MUTED;
-      html += `<div style="padding:8px 0 4px 0;font-size:12px;font-weight:600;color:${{catColor}};border-top:1px solid var(--border);margin-top:4px">
-        ${{r.cat}} ${{catName}}
+      html += `<div style="padding:12px 0 4px 0;font-size:13px;font-style:italic;color:var(--text);border-top:1px solid #eee;margin-top:4px">
+        ${{r.cat}}
       </div>`;
       prevCat = r.cat;
     }}
@@ -875,76 +993,85 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
   el.innerHTML = html;
 }})();
 
-// 2b. Heat table
+// 2b. Paired horizontal bars
 (function() {{
   const el = document.getElementById('heatTable');
+  const slider = document.getElementById('minFilter');
+  const sliderVal = document.getElementById('minFilterVal');
   const intents = D.top_low_intents;
   const catMap = D.intent_to_category || {{}};
   const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  const rows = intents.map(intent => {{
+  const allRows = intents.map(intent => {{
     const g = (D.low_proportions.gpt5[intent] || 0) * 100;
     const c = (D.low_proportions.claude45[intent] || 0) * 100;
     const cat = catMap[intent] || '?';
     return {{ intent, g, c, gap: Math.abs(g - c), cat }};
   }});
 
-  const grouped = {{}};
-  for (const r of rows) {{
-    if (!grouped[r.cat]) grouped[r.cat] = [];
-    grouped[r.cat].push(r);
-  }}
-  for (const cat of Object.keys(grouped)) {{
-    grouped[cat].sort((a, b) => b.gap - a.gap);
-  }}
-  const sorted = [];
-  for (const cat of catOrder) {{
-    if (grouped[cat]) sorted.push(...grouped[cat]);
-  }}
+  function renderPairedBars() {{
+    const minVal = parseFloat(slider.value);
+    sliderVal.textContent = minVal;
 
-  const maxVal = Math.max(...sorted.map(r => Math.max(r.g, r.c)), 1);
+    const rows = allRows.filter(r => r.g > minVal || r.c > minVal);
 
-  function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
-
-  let html = `<table class="heat-table">
-    <thead><tr>
-      <th></th>
-      <th class="col-gpt" style="text-align:center">GPT-5</th>
-      <th class="col-claude" style="text-align:center">Claude 4.5</th>
-    </tr></thead><tbody>`;
-
-  let prevCat = '';
-  for (const r of sorted) {{
-    if (r.cat !== prevCat) {{
-      const catName = r.cat;
-      const catColor = NAME_COLORS[r.cat] || MUTED;
-      html += `<tr class="cat-header"><td colspan="3" style="color:${{catColor}}">${{r.cat}} ${{catName}}</td></tr>`;
-      prevCat = r.cat;
+    const grouped = {{}};
+    for (const r of rows) {{
+      if (!grouped[r.cat]) grouped[r.cat] = [];
+      grouped[r.cat].push(r);
+    }}
+    for (const cat of Object.keys(grouped)) {{
+      grouped[cat].sort((a, b) => b.gap - a.gap);
     }}
 
-    const desc = (D.intent_descriptions || {{}})[r.intent] || '';
-    const gBold = r.g > r.c && r.gap >= 0.3;
-    const cBold = r.c > r.g && r.gap >= 0.3;
+    const maxVal = Math.max(...rows.map(r => Math.max(r.g, r.c)), 1);
+    function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
 
-    html += `<tr>
-      <td class="intent-name">${{r.intent}}${{desc ? `<div class="intent-desc">${{desc}}</div>` : ''}}</td>
-      <td class="bar-cell gpt">
-        <div class="bar-wrap">
-          <div class="bar-bg" style="width:${{barPct(r.g)}}%;background:${{GPT_COLOR}}"></div>
-          <span class="bar-val" style="${{gBold ? 'font-weight:700' : ''}}">${{r.g.toFixed(1)}}</span>
-        </div>
-      </td>
-      <td class="bar-cell claude">
-        <div class="bar-wrap">
-          <div class="bar-bg" style="width:${{barPct(r.c)}}%;background:${{CLAUDE_COLOR}}"></div>
-          <span class="bar-val" style="${{cBold ? 'font-weight:700' : ''}}">${{r.c.toFixed(1)}}</span>
-        </div>
-      </td>
-    </tr>`;
+    let html = `<table class="paired-table">
+      <thead><tr>
+        <th></th>
+        <th style="text-align:left;padding-left:4px">
+          <span style="color:${{CLAUDE_COLOR}}">Claude</span>
+          <span style="color:var(--muted);padding:0 6px">/</span>
+          <span style="color:${{GPT_COLOR}}">GPT</span>
+          <span style="color:var(--muted);font-weight:400;padding-left:8px">per 100 steps</span>
+        </th>
+      </tr></thead><tbody>`;
+
+    let rowIdx = 0;
+    for (const cat of catOrder) {{
+      if (!grouped[cat] || grouped[cat].length === 0) continue;
+      html += `<tr class="cat-header"><td colspan="2">${{cat}}</td></tr>`;
+
+      for (const r of grouped[cat]) {{
+        const gBold = r.g > r.c && r.gap >= 0.3 ? 'font-weight:700' : '';
+        const cBold = r.c > r.g && r.gap >= 0.3 ? 'font-weight:700' : '';
+        const displayName = (D.intent_display_names || {{}})[r.intent] || r.intent;
+        const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
+
+        html += `<tr class="paired-row${{zebra}}">
+          <td class="paired-name" title="${{r.intent}}">${{displayName}}</td>
+          <td class="paired-bars">
+            <div class="paired-bar-row">
+              <div class="paired-bar" style="width:${{barPct(r.c)}}%;background:${{CLAUDE_COLOR}}"></div>
+              <span class="paired-bar-val" style="color:${{CLAUDE_COLOR}};${{cBold}}">${{r.c.toFixed(1)}}</span>
+            </div>
+            <div class="paired-bar-row">
+              <div class="paired-bar" style="width:${{barPct(r.g)}}%;background:${{GPT_COLOR}}"></div>
+              <span class="paired-bar-val" style="color:${{GPT_COLOR}};${{gBold}}">${{r.g.toFixed(1)}}</span>
+            </div>
+          </td>
+        </tr>`;
+        rowIdx++;
+      }}
+    }}
+
+    html += '</tbody></table>';
+    el.innerHTML = html;
   }}
 
-  html += '</tbody></table>';
-  el.innerHTML = html;
+  slider.addEventListener('input', renderPairedBars);
+  renderPairedBars();
 }})();
 
 // 3. Transition matrices
@@ -1001,7 +1128,7 @@ function drawTransitionMatrix(containerId, matrix, mode) {{
       if (mode === 'diff') {{
         const intensity = Math.sqrt(Math.abs(v) / maxVal);
         const alpha = 0.15 + intensity * 0.85;
-        const color = v > 0.0001 ? GPT_COLOR : v < -0.0001 ? CLAUDE_COLOR : '#333';
+        const color = v > 0.0001 ? GPT_COLOR : v < -0.0001 ? CLAUDE_COLOR : '#ccc';
         cell.style.background = color;
         cell.style.opacity = alpha.toFixed(2);
         if (Math.abs(v) > 0.001) {{
@@ -1083,10 +1210,10 @@ drawTransitionMatrix('matrixDiff', diffMatrix, 'diff');
   ctx.fillText('steps per trajectory', w / 2, h - 6);
 }})();
 
-// Color interpolation helper: blend between bg (#0f151d) and target color
+// Color interpolation helper: blend between panel bg and target color
 // t=0 → background, t=1 → full color
 function lerpColor(hex, t) {{
-  const bg = [15, 21, 29]; // #0f151d
+  const bg = [255, 255, 248]; // #fffff8 (page bg)
   const r = parseInt(hex.slice(1,3), 16);
   const g = parseInt(hex.slice(3,5), 16);
   const b = parseInt(hex.slice(5,7), 16);
@@ -1143,7 +1270,7 @@ function drawHeatmap(containerId, model, normalize) {{
       // Use sqrt for better spread, but map 0 → 0 exactly
       const t = ratio > 0 ? 0.15 + Math.sqrt(ratio) * 0.85 : 0;
       const bg = lerpColor(color, t);
-      const textColor = t > 0.4 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
+      const textColor = t > 0.5 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)';
       html += `<div class="heatmap-cell" style="background:${{bg}};color:${{textColor}}">${{(vals[b]*100).toFixed(0)}}%</div>`;
     }}
   }}
