@@ -155,48 +155,48 @@ def _process_one_file(args: tuple[str, str]) -> dict:
 
 INTENT_DISPLAY_NAMES = {
     # read
-    "read-file-full": "view full file",
-    "read-file-range": "view line range",
+    "read-file-full": "view file",
+    "read-file-range": "view lines (range)",
     "read-file-full(truncated)": "view file (truncated)",
     "read-test-file": "view test file",
     "read-config-file": "view config file",
     "read-via-bash": "cat / head / tail",
     # search
-    "view-directory": "browse directory",
-    "list-directory": "ls / tree / pwd",
-    "search-keyword": "grep for pattern",
-    "search-files-by-name": "find files by name",
-    "search-files-by-content": "search file contents",
-    "inspect-file-metadata": "file metadata (wc/stat)",
+    "view-directory": "view directory",
+    "list-directory": "ls / tree",
+    "search-keyword": "grep / ripgrep",
+    "search-files-by-name": "find by filename",
+    "search-files-by-content": "find | grep",
+    "inspect-file-metadata": "wc / stat",
     # reproduce
     "create-repro-script": "write repro script",
     "run-repro-script": "run repro script",
-    "run-inline-snippet": "run one-liner (python -c, etc.)",
+    "run-inline-snippet": "python -c / node -e",
     # edit
-    "edit-source": "edit source code",
+    "edit-source": "edit source",
     "insert-source": "insert into source",
     "apply-patch": "apply patch",
-    "create-file": "create new file",
+    "create-file": "create file",
     # verify
-    "run-test-suite": "run full test suite",
-    "run-test-specific": "run targeted test (-k / ::)",
+    "run-test-suite": "pytest / go test (broad)",
+    "run-test-specific": "pytest -k / :: (targeted)",
     "create-test-script": "write test file",
-    "run-verify-script": "run verification script",
-    "create-verify-script": "write verification script",
-    "edit-test-or-repro": "edit test or repro file",
+    "run-verify-script": "run verify script",
+    "create-verify-script": "write verify script",
+    "edit-test-or-repro": "edit test / repro",
     "run-custom-script": "run custom script",
     "syntax-check": "syntax check",
-    "compile-build": "compile / build",
+    "compile-build": "go build / make / tsc",
     # git
     "git-diff": "git diff",
     "git-status-log": "git status / log / show",
     "git-stash": "git stash",
     # housekeeping
-    "file-cleanup": "rm / mv / cp files",
+    "file-cleanup": "rm / mv / cp",
     "create-documentation": "write docs file",
     "start-service": "start service (redis, etc.)",
-    "install-deps": "install dependencies",
-    "check-tool-exists": "check tool exists",
+    "install-deps": "pip install / npm install",
+    "check-tool-exists": "which / type",
     # other
     "submit": "submit patch",
     "empty": "empty action (timeout)",
@@ -530,13 +530,13 @@ def render_html(payload: dict) -> str:
     .paired-bar-row {{
       display: flex;
       align-items: center;
-      height: 13px;
+      height: 11px;
       gap: 4px;
     }}
     .paired-bar {{
-      height: 13px;
+      height: 11px;
       border-radius: 2px;
-      opacity: 0.8;
+      opacity: 0.75;
     }}
     .paired-bar-val {{
       font-size: 9.5px;
@@ -550,6 +550,13 @@ def render_html(payload: dict) -> str:
       font-size: 13px;
       color: var(--text);
       letter-spacing: 0.3px;
+    }}
+    .cat-annotation {{
+      font-style: normal;
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-top: 2px;
+      line-height: 1.4;
     }}
 
     /* Stacked area legend */
@@ -627,26 +634,11 @@ def render_html(payload: dict) -> str:
   <h2>1. High-Level Action Frequencies</h2>
   <p class="chart-desc">Proportion of steps in each high-level category. Normalised so models are comparable despite different step counts.</p>
   <div class="chart-wrapper">
-    <canvas id="highChart" height="300"></canvas>
-  </div>
-
-  <div class="chart-wrapper" style="margin-top:12px">
     <div id="highPaired"></div>
   </div>
 
-  <h2>2. Low-Level Intent Differences</h2>
-  <p class="chart-desc">Per 100 steps, how many times does each model perform this action? <span style="color:var(--gpt)">Orange dot</span> = GPT-5, <span style="color:var(--claude)">blue dot</span> = Claude 4.5. The bar between dots is the gap. Sorted by largest gap within each category.</p>
-  <div class="chart-wrapper">
-    <div id="lowDumbbell"></div>
-  </div>
-
-  <h2>2b. Intent Comparison Table</h2>
-  <p class="chart-desc">Bar width = frequency per 100 steps. Compare bar lengths within each row to spot differences; compare across rows to see which intents dominate overall.</p>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:13px;color:var(--muted)">
-    <label for="minFilter">Min frequency to show:</label>
-    <input type="range" id="minFilter" min="0" max="10" step="0.5" value="2" style="width:200px" />
-    <span id="minFilterVal" style="font-family:ui-monospace,monospace;color:var(--text);min-width:20px">2</span>
-  </div>
+  <h2>2. Intent Comparison</h2>
+  <p class="chart-desc">Frequency per 100 steps. <span style="color:var(--claude)">Claude 4.5</span> / <span style="color:var(--gpt)">GPT-5</span>.</p>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
@@ -727,12 +719,10 @@ def render_html(payload: dict) -> str:
   <div class="chart-wrapper">
     <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
     <canvas id="stackedGpt" height="200"></canvas>
-    <div class="stacked-legend" id="legendGpt"></div>
   </div>
   <div class="chart-wrapper">
     <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
     <canvas id="stackedClaude" height="200"></canvas>
-    <div class="stacked-legend" id="legendClaude"></div>
   </div>
 
 </div>
@@ -743,8 +733,16 @@ const D = {payload_json};
 // ── Helpers ──────────────────────────────────────────────
 function getCtx(id) {{
   const c = document.getElementById(id);
-  c.width = c.parentElement.clientWidth - 40;
-  return {{ canvas: c, ctx: c.getContext('2d'), w: c.width, h: c.height }};
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = c.parentElement.clientWidth - 40;
+  const cssH = c.height;
+  c.width = cssW * dpr;
+  c.height = cssH * dpr;
+  c.style.width = cssW + 'px';
+  c.style.height = cssH + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return {{ canvas: c, ctx, w: cssW, h: cssH }};
 }}
 
 const GPT_COLOR = '#c67a2e';
@@ -846,13 +844,7 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 
 // ── Draw charts ──────────────────────────────────────────
 
-// 1. High-level
-const highLabels = CATEGORY_NAMES;
-const gptHigh = highLabels.map(l => D.high_proportions.gpt5[l] || 0);
-const claudeHigh = highLabels.map(l => D.high_proportions.claude45[l] || 0);
-drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
-
-// 1b. High-level paired bars
+// 1. High-level paired bars
 (function() {{
   const el = document.getElementById('highPaired');
   const cats = CATEGORY_NAMES;
@@ -903,117 +895,31 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
   el.innerHTML = html;
 }})();
 
-// 2. Low-level dumbbell chart, grouped by category
+// 2. Paired horizontal bars
 (function() {{
-  const el = document.getElementById('lowDumbbell');
+  const el = document.getElementById('heatTable');
   const intents = D.top_low_intents;
   const catMap = D.intent_to_category || {{}};
   const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  // Convert to "per 100 steps"
+  const catAnnotations = {{
+    'read': 'GPT reads 1.6x more, especially full files. Over a third of its steps are reading.',
+    'search': 'Both grep at similar rates. Claude also runs find | grep and finds files by name (9 per 100 steps vs 0.1 for GPT).',
+    'reproduce': 'GPT writes and runs reproduction scripts 4x more often.',
+    'edit': 'Similar edit rates overall. GPT also uses insert (1.9 per 100). Claude edits exclusively via str_replace.',
+    'verify': 'Claude spends 28% of steps verifying (8x GPT), running test suites, writing test files, and compiling.',
+    'git': 'Claude regularly runs git diff and git log to review its own changes. GPT uses git in 0.1% of steps.',
+    'housekeeping': 'Claude cleans up with rm/mv/cp (2.7 per 100) and writes documentation files. GPT does 0.1 per 100.',
+  }};
+
   const rows = intents.map(intent => {{
     const g = (D.low_proportions.gpt5[intent] || 0) * 100;
     const c = (D.low_proportions.claude45[intent] || 0) * 100;
     const cat = catMap[intent] || '?';
     return {{ intent, g, c, gap: Math.abs(g - c), cat }};
-  }}).filter(r => r.g >= 1 || r.c >= 1);
+  }}).filter(r => r.g > 1.5 || r.c > 1.5);
 
-  // Group by category, sort by gap within each
-  const grouped = {{}};
-  for (const r of rows) {{
-    if (!grouped[r.cat]) grouped[r.cat] = [];
-    grouped[r.cat].push(r);
-  }}
-  for (const cat of Object.keys(grouped)) {{
-    grouped[cat].sort((a, b) => b.gap - a.gap);
-  }}
-  const sorted = [];
-  for (const cat of catOrder) {{
-    if (grouped[cat]) sorted.push(...grouped[cat]);
-  }}
-
-  // Scale: 0 to max value, mapped to 8%–92% of track width for label room
-  const maxVal = Math.max(...sorted.map(r => Math.max(r.g, r.c)), 1);
-  const PAD_L = 8;  // % left padding
-  const PAD_R = 92; // % right limit
-  const RANGE = PAD_R - PAD_L;
-
-  function pos(v) {{ return (PAD_L + (v / maxVal) * RANGE).toFixed(2); }}
-
-  // Scale ticks
-  let html = `<div class="dumbbell-header">
-    <div style="text-align:right;font-size:12px">per 100 steps</div>
-    <div class="dumbbell-scale">`;
-  const nTicks = 5;
-  for (let i = 0; i <= nTicks; i++) {{
-    const v = (maxVal * i / nTicks);
-    html += `<span class="dumbbell-scale-tick" style="left:${{pos(v)}}%">${{v.toFixed(0)}}</span>`;
-  }}
-  html += `</div></div>`;
-
-  let prevCat = '';
-  for (const r of sorted) {{
-    if (r.cat !== prevCat) {{
-      html += `<div style="padding:12px 0 4px 0;font-size:13px;font-style:italic;color:var(--text);border-top:1px solid #eee;margin-top:4px">
-        ${{r.cat}}
-      </div>`;
-      prevCat = r.cat;
-    }}
-
-    const lo = Math.min(r.g, r.c);
-    const hi = Math.max(r.g, r.c);
-    const loPos = pos(lo);
-    const hiPos = pos(hi);
-    const gPos = pos(r.g);
-    const cPos = pos(r.c);
-
-    // Bar color: who has more?
-    const barColor = r.g > r.c ? GPT_COLOR : CLAUDE_COLOR;
-
-    // Lower value label to the LEFT of its dot, higher value label to the RIGHT
-    const loModel = r.g <= r.c ? 'g' : 'c';
-    const loColor = loModel === 'g' ? GPT_COLOR : CLAUDE_COLOR;
-    const hiColor = loModel === 'g' ? CLAUDE_COLOR : GPT_COLOR;
-
-    // Hide lower label when dots nearly overlap
-    const showLo = r.gap >= 0.3;
-
-    html += `<div class="dumbbell-row">
-      <div class="dumbbell-label">${{r.intent}}</div>
-      <div class="dumbbell-track">
-        <div class="dumbbell-line" style="left:${{loPos}}%;width:${{(parseFloat(hiPos)-parseFloat(loPos)).toFixed(2)}}%;background:${{barColor}};opacity:0.5"></div>
-        <div class="dumbbell-dot" style="left:calc(${{gPos}}% - 8px);background:${{GPT_COLOR}}"></div>
-        <div class="dumbbell-dot" style="left:calc(${{cPos}}% - 8px);background:${{CLAUDE_COLOR}}"></div>
-        <div class="dumbbell-val" style="right:${{(100 - parseFloat(loPos)).toFixed(2)}}%;text-align:right;padding-right:20px;color:${{loColor}};opacity:${{showLo ? 1 : 0}}">${{lo.toFixed(1)}}</div>
-        <div class="dumbbell-val" style="left:${{hiPos}}%;padding-left:20px;color:${{hiColor}}">${{hi.toFixed(1)}}</div>
-      </div>
-    </div>`;
-  }}
-
-  el.innerHTML = html;
-}})();
-
-// 2b. Paired horizontal bars
-(function() {{
-  const el = document.getElementById('heatTable');
-  const slider = document.getElementById('minFilter');
-  const sliderVal = document.getElementById('minFilterVal');
-  const intents = D.top_low_intents;
-  const catMap = D.intent_to_category || {{}};
-  const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
-
-  const allRows = intents.map(intent => {{
-    const g = (D.low_proportions.gpt5[intent] || 0) * 100;
-    const c = (D.low_proportions.claude45[intent] || 0) * 100;
-    const cat = catMap[intent] || '?';
-    return {{ intent, g, c, gap: Math.abs(g - c), cat }};
-  }});
-
-  function renderPairedBars() {{
-    const minVal = parseFloat(slider.value);
-    sliderVal.textContent = minVal;
-
-    const rows = allRows.filter(r => r.g > minVal || r.c > minVal);
+  {{
 
     const grouped = {{}};
     for (const r of rows) {{
@@ -1028,20 +934,13 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
     function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
 
     let html = `<table class="paired-table">
-      <thead><tr>
-        <th></th>
-        <th style="text-align:left;padding-left:4px">
-          <span style="color:${{CLAUDE_COLOR}}">Claude</span>
-          <span style="color:var(--muted);padding:0 6px">/</span>
-          <span style="color:${{GPT_COLOR}}">GPT</span>
-          <span style="color:var(--muted);font-weight:400;padding-left:8px">per 100 steps</span>
-        </th>
-      </tr></thead><tbody>`;
+      <tbody>`;
 
     let rowIdx = 0;
     for (const cat of catOrder) {{
       if (!grouped[cat] || grouped[cat].length === 0) continue;
-      html += `<tr class="cat-header"><td colspan="2">${{cat}}</td></tr>`;
+      const ann = catAnnotations[cat] || '';
+      html += `<tr class="cat-header"><td colspan="2">${{cat}}${{ann ? `<div class="cat-annotation">${{ann}}</div>` : ''}}</td></tr>`;
 
       for (const r of grouped[cat]) {{
         const gBold = r.g > r.c && r.gap >= 0.3 ? 'font-weight:700' : '';
@@ -1069,9 +968,6 @@ drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
     html += '</tbody></table>';
     el.innerHTML = html;
   }}
-
-  slider.addEventListener('input', renderPairedBars);
-  renderPairedBars();
 }})();
 
 // 3. Transition matrices
@@ -1287,26 +1183,42 @@ drawHeatmapCol = drawHeatmap; // reuse
 drawHeatmap('heatmapColGpt', 'gpt5', 'col');
 drawHeatmap('heatmapColClaude', 'claude45', 'col');
 
-// 6. Stacked area charts
-function drawStackedArea(canvasId, model) {{
+// 6. Stacked area charts — 5 grouped bands, inline labels
+function drawStackedArea(canvasId, model, annotations) {{
   const {{ ctx, w, h }} = getCtx(canvasId);
-  const left = 40, right = 10, top = 10, bot = 20;
+  const left = 40, right = 80, top = 10, bot = 20;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
-  const letters = ['R','S','P','E','V','G','H'];
 
-  // Build stacked values
+  // 5 grouped bands: understand (R+S), reproduce (P), edit (E), verify (V), cleanup (G+H)
+  const groups = [
+    {{ name: 'understand', letters: ['R','S'], color: '#5a7d9a' }},
+    {{ name: 'reproduce', letters: ['P'], color: '#7a6a9a' }},
+    {{ name: 'edit',      letters: ['E'], color: '#4a8a5a' }},
+    {{ name: 'verify',    letters: ['V'], color: '#a0607a' }},
+    {{ name: 'cleanup',   letters: ['G','H'], color: '#8a7a40' }},
+  ];
+
+  // Sum letters per group per bin
+  const groupVals = groups.map(g => {{
+    const summed = new Array(bins).fill(0);
+    for (const l of g.letters) {{
+      const vals = D.avg_phase[model][l];
+      if (vals) for (let b = 0; b < bins; b++) summed[b] += vals[b];
+    }}
+    return summed;
+  }});
+
+  // Build stacked layers
   const stacked = [];
   let cumulative = new Array(bins).fill(0);
-  for (const letter of letters) {{
-    const vals = D.avg_phase[model][letter];
-    const layer = vals.map((v, i) => cumulative[i] + v);
-    stacked.push({{ letter, bottom: [...cumulative], top: layer }});
+  for (let gi = 0; gi < groups.length; gi++) {{
+    const layer = groupVals[gi].map((v, i) => cumulative[i] + v);
+    stacked.push({{ group: groups[gi], bottom: [...cumulative], top: layer }});
     cumulative = layer;
   }}
 
-  // Normalize so each bin sums to ~1
   const maxes = cumulative;
 
   function xAt(i) {{ return left + (i / (bins - 1)) * plotW; }}
@@ -1315,18 +1227,16 @@ function drawStackedArea(canvasId, model) {{
     return top + plotH - norm * plotH;
   }}
 
-  // Draw from bottom layer up
+  // Draw from top layer down (so bottom layers paint over top)
   for (let s = stacked.length - 1; s >= 0; s--) {{
     const layer = stacked[s];
-    ctx.fillStyle = LETTER_COLORS[layer.letter] || '#555';
-    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = layer.group.color;
+    ctx.globalAlpha = 0.75;
     ctx.beginPath();
-    // Top edge left to right
     for (let i = 0; i < bins; i++) {{
       const x = xAt(i), y = yAt(layer.top[i], i);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }}
-    // Bottom edge right to left
     for (let i = bins - 1; i >= 0; i--) {{
       ctx.lineTo(xAt(i), yAt(layer.bottom[i], i));
     }}
@@ -1335,27 +1245,76 @@ function drawStackedArea(canvasId, model) {{
   }}
   ctx.globalAlpha = 1;
 
+  // Labels at the right edge of each band
+  const lastBin = bins - 1;
+  ctx.font = '11px Palatino, Georgia, serif';
+  ctx.textAlign = 'left';
+  for (let s = 0; s < stacked.length; s++) {{
+    const layer = stacked[s];
+    const midY = (yAt(layer.top[lastBin], lastBin) + yAt(layer.bottom[lastBin], lastBin)) / 2;
+    ctx.fillStyle = layer.group.color;
+    ctx.fillText(layer.group.name, xAt(lastBin) + 8, midY + 4);
+  }}
+
   // X labels
-  ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = MUTED; ctx.font = '10px Palatino, Georgia, serif'; ctx.textAlign = 'center';
   for (let i = 0; i < bins; i++) {{
     if (i % 5 === 0) ctx.fillText(i * 5 + '%', xAt(i), top + plotH + 16);
   }}
 
+  // Annotations: brackets inside the chart area
+  if (annotations) {{
+    ctx.lineWidth = 0.8;
+
+    for (let ai = 0; ai < annotations.length; ai++) {{
+      const a = annotations[ai];
+      const fromBin = (a.from / 100) * (bins - 1);
+      const toBin = (a.to / 100) * (bins - 1);
+      const midBin = (fromBin + toBin) / 2;
+      const x0 = xAt(fromBin);
+      const x1 = xAt(toBin);
+
+      // Find the vertical midpoint of the target band at the annotation's center
+      const gi = groups.findIndex(g => g.color === a.color);
+      const midBinInt = Math.round(midBin);
+      const bandTop = yAt(stacked[gi].top[midBinInt], midBinInt);
+      const bandBot = yAt(stacked[gi].bottom[midBinInt], midBinInt);
+      const y = (bandTop + bandBot) / 2;
+
+      // Bracket: thin horizontal line with small verticals at ends
+      ctx.strokeStyle = '#fff';
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x0, y); ctx.lineTo(x1, y);
+      ctx.moveTo(x0, y - 4); ctx.lineTo(x0, y + 4);
+      ctx.moveTo(x1, y - 4); ctx.lineTo(x1, y + 4);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Label centered on the bracket
+      ctx.fillStyle = '#fff';
+      ctx.globalAlpha = 0.9;
+      ctx.font = '9.5px Palatino, Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(a.label, (x0 + x1) / 2, y - 7);
+      ctx.globalAlpha = 1;
+    }}
+  }}
 }}
 
-function fillStackedLegend(legendId) {{
-  const letters = ['R','S','P','E','V','G','H'];
-  const el = document.getElementById(legendId);
-  el.innerHTML = letters.map(l => {{
-    const name = LETTER_TO_NAME[l] || l;
-    return `<div class="item"><div class="swatch" style="background:${{LETTER_COLORS[l]}}"></div>${{name}}</div>`;
-  }}).join('');
-}}
+const gptAnnotations = [
+  {{ from: 50, to: 80, label: 'edits peak here', color: '#4a8a5a' }},
+  {{ from: 85, to: 100, label: 'verification', color: '#a0607a' }},
+  {{ from: 80, to: 100, label: 'reproduce scripts', color: '#7a6a9a' }},
+];
+const claudeAnnotations = [
+  {{ from: 30, to: 50, label: 'edits peak here', color: '#4a8a5a' }},
+  {{ from: 60, to: 80, label: 'verification peaks', color: '#a0607a' }},
+  {{ from: 80, to: 100, label: 'cleanup', color: '#8a7a40' }},
+];
 
-drawStackedArea('stackedGpt', 'gpt5');
-fillStackedLegend('legendGpt');
-drawStackedArea('stackedClaude', 'claude45');
-fillStackedLegend('legendClaude');
+drawStackedArea('stackedGpt', 'gpt5', gptAnnotations);
+drawStackedArea('stackedClaude', 'claude45', claudeAnnotations);
 
 </script>
 </body>
