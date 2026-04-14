@@ -24,30 +24,35 @@ from pathlib import Path
 
 import classify_intent as ci
 
+# Single-letter codes for transition matrices and sequence analysis only
 HIGH_LEVEL_LETTER = {
-    "read-code": "R",
-    "search-navigate": "S",
+    "read": "R",
+    "search": "S",
     "reproduce": "P",
-    "implement": "I",
+    "edit": "E",
     "verify": "V",
     "git": "G",
-    "infrastructure": "F",
+    "housekeeping": "H",
     "failed": "X",
     "other": "O",
 }
-HIGH_LEVEL_NAME = {v: k for k, v in HIGH_LEVEL_LETTER.items()}
+# Reverse: letter → short display name (used in transition matrices)
+LETTER_TO_NAME = {v: k for k, v in HIGH_LEVEL_LETTER.items()}
 
+# Colors keyed by the short name (not letter)
 HIGH_LEVEL_COLORS = {
-    "R": "#6cb6ff",
-    "S": "#f0883e",
-    "P": "#bc8cff",
-    "I": "#3fb950",
-    "V": "#f778ba",
-    "G": "#e0c745",
-    "F": "#39c5cf",
-    "X": "#f85149",
-    "O": "#545d68",
+    "read": "#6cb6ff",
+    "search": "#f0883e",
+    "reproduce": "#bc8cff",
+    "edit": "#3fb950",
+    "verify": "#f778ba",
+    "git": "#e0c745",
+    "housekeeping": "#39c5cf",
+    "failed": "#f85149",
+    "other": "#545d68",
 }
+# Also keyed by letter for transition matrix rendering
+LETTER_COLORS = {HIGH_LEVEL_LETTER[k]: v for k, v in HIGH_LEVEL_COLORS.items()}
 
 
 def parse_repo(instance_id: str) -> str:
@@ -120,6 +125,12 @@ def _process_one_file(args: tuple[str, str]) -> dict:
     }
 
 
+def _load_intent_descriptions() -> dict[str, str]:
+    desc_path = Path(__file__).parent / "intent_descriptions.json"
+    with open(desc_path) as f:
+        return json.load(f)
+
+
 def build_payload(data_root: Path) -> dict:
     files = collect_files(data_root)
 
@@ -173,7 +184,7 @@ def build_payload(data_root: Path) -> dict:
         return {k: v / total for k, v in counter.items()}
 
     # Build transition matrices (row=from, col=to) as proportions
-    ordered_letters = ["R", "S", "P", "I", "V", "G", "F", "X", "O"]
+    ordered_letters = ["R", "S", "P", "E", "V", "G", "H", "X", "O"]
     bigram_matrix: dict[str, list[list[float]]] = {}
     for model in ("gpt5", "claude45"):
         total_bg = sum(bigram_counts[model].values())
@@ -196,7 +207,7 @@ def build_payload(data_root: Path) -> dict:
     top_bigrams = sorted(top_bigrams_set, key=lambda b: -(bigram_counts["gpt5"].get(b, 0) + bigram_counts["claude45"].get(b, 0)))
 
     # Get all intents from displayed categories (exclude failed/X)
-    displayed_categories = {"read-code", "search-navigate", "reproduce", "implement", "verify", "git", "infrastructure", "other"}
+    displayed_categories = {"read", "search", "reproduce", "edit", "verify", "git", "housekeeping", "other"}
     top_low_set = set()
     for intent, high in ci.INTENT_TO_HIGH_LEVEL.items():
         if high in displayed_categories:
@@ -216,7 +227,10 @@ def build_payload(data_root: Path) -> dict:
 
     return {
         "high_counts": {m: dict(high_counts[m].most_common()) for m in ("gpt5", "claude45")},
-        "high_proportions": {m: to_proportions(high_counts[m]) for m in ("gpt5", "claude45")},
+        "high_proportions": {
+            m: {LETTER_TO_NAME.get(k, k): v for k, v in to_proportions(high_counts[m]).items()}
+            for m in ("gpt5", "claude45")
+        },
         "low_proportions": {m: to_proportions(low_counts[m]) for m in ("gpt5", "claude45")},
         "top_low_intents": top_low,
         "bigram_matrix": bigram_matrix,
@@ -225,9 +239,12 @@ def build_payload(data_root: Path) -> dict:
         "step_dist": {m: bin_steps(step_counts[m]) for m in ("gpt5", "claude45")},
         "num_trajs": {m: len(all_high_seqs[m]) for m in ("gpt5", "claude45")},
         "high_level_letter": HIGH_LEVEL_LETTER,
-        "high_level_name": HIGH_LEVEL_NAME,
-        "high_level_colors": HIGH_LEVEL_COLORS,
-        "intent_to_category": {k: HIGH_LEVEL_LETTER.get(v, "?") for k, v in ci.INTENT_TO_HIGH_LEVEL.items()},
+        "letter_to_name": LETTER_TO_NAME,
+        "name_to_letter": HIGH_LEVEL_LETTER,
+        "letter_colors": LETTER_COLORS,
+        "name_colors": HIGH_LEVEL_COLORS,
+        "intent_to_category": dict(ci.INTENT_TO_HIGH_LEVEL),
+        "intent_descriptions": _load_intent_descriptions(),
     }
 
 
@@ -334,61 +351,144 @@ def render_html(payload: dict) -> str:
       font-size: 14px; font-weight: 600; margin-bottom: 10px;
     }}
 
-    /* Diverging bar chart */
-    .diverging-row {{
+    /* Dumbbell chart */
+    .dumbbell-row {{
       display: grid;
-      grid-template-columns: 170px 50px 1fr 50px;
-      gap: 6px;
+      grid-template-columns: 220px 1fr;
+      gap: 8px;
       align-items: center;
-      padding: 3px 0;
+      padding: 4px 0;
       border-bottom: 1px solid #1a2230;
     }}
-    .diverging-row:last-child {{ border-bottom: none; }}
-    .diverging-label {{
+    .dumbbell-row:last-child {{ border-bottom: none; }}
+    .dumbbell-label {{
       text-align: right;
       font-family: ui-monospace, monospace;
       font-size: 12px;
       color: var(--text);
     }}
-    .diverging-val {{
+    .dumbbell-track {{
+      position: relative;
+      height: 22px;
+    }}
+    .dumbbell-line {{
+      position: absolute;
+      top: 10px;
+      height: 2px;
+      border-radius: 1px;
+    }}
+    .dumbbell-dot {{
+      position: absolute;
+      top: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }}
+    .dumbbell-val {{
+      position: absolute;
+      top: 2px;
       font-family: ui-monospace, monospace;
       font-size: 11px;
-      color: var(--muted);
+      white-space: nowrap;
     }}
-    .diverging-val.left {{ text-align: right; }}
-    .diverging-val.right {{ text-align: left; }}
-    .diverging-bar-wrap {{
-      position: relative;
-      height: 18px;
-    }}
-    .diverging-bar {{
-      position: absolute;
-      top: 1px;
-      height: 16px;
-      border-radius: 3px;
-    }}
-    .diverging-center {{
-      position: absolute;
-      left: 50%;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: var(--border);
-    }}
-    .diverging-header {{
+    .dumbbell-header {{
       display: grid;
-      grid-template-columns: 170px 50px 1fr 50px;
-      gap: 6px;
+      grid-template-columns: 220px 1fr;
+      gap: 8px;
       font-size: 11px;
       color: var(--muted);
       padding-bottom: 6px;
       border-bottom: 1px solid var(--border);
       margin-bottom: 4px;
     }}
-    .diverging-header .center-labels {{
+    .dumbbell-scale {{
+      position: relative;
+      height: 16px;
+    }}
+    .dumbbell-scale-tick {{
+      position: absolute;
+      top: 0;
+      font-size: 10px;
+      color: var(--muted);
+      font-family: ui-monospace, monospace;
+      transform: translateX(-50%);
+    }}
+
+    /* Heat table */
+    .heat-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }}
+    .heat-table th {{
+      text-align: right;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+      border-bottom: 1px solid var(--border);
+    }}
+    .heat-table th.col-gpt {{ color: var(--gpt); font-weight: 600; }}
+    .heat-table th.col-claude {{ color: var(--claude); font-weight: 600; }}
+    .heat-table td {{
+      padding: 3px 0;
+      border-bottom: 1px solid #1a2230;
+    }}
+    .heat-table td.intent-name {{
+      text-align: right;
+      padding-right: 12px;
+      color: var(--text);
+      width: 200px;
+    }}
+    .heat-table td.bar-cell {{
+      width: 25%;
+      padding: 3px 4px;
+    }}
+    .heat-table .bar-wrap {{
+      position: relative;
+      height: 20px;
       display: flex;
-      justify-content: space-between;
-      padding: 0 4px;
+      align-items: center;
+    }}
+    .heat-table .bar-bg {{
+      position: absolute;
+      top: 1px;
+      height: 18px;
+      border-radius: 3px;
+      opacity: 0.7;
+    }}
+    .heat-table .bar-val {{
+      position: relative;
+      z-index: 1;
+      padding: 0 6px;
+      font-size: 11px;
+      color: var(--text);
+    }}
+    .heat-table .bar-cell.gpt .bar-wrap {{
+      justify-content: flex-end;
+    }}
+    .heat-table .bar-cell.gpt .bar-bg {{
+      right: 0;
+    }}
+    .heat-table .bar-cell.claude .bar-bg {{
+      left: 0;
+    }}
+    .heat-table .intent-desc {{
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-top: 1px;
+    }}
+    .heat-table .cat-header td {{
+      padding: 10px 0 4px 0;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
     }}
 
     /* Stacked area legend */
@@ -471,9 +571,15 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>2. Low-Level Intent Differences</h2>
-  <p class="chart-desc">Sorted by largest difference. Bar shows gap between models; numbers show each model's share. Intents where the models behave most differently rise to the top.</p>
+  <p class="chart-desc">Per 100 steps, how many times does each model perform this action? <span style="color:var(--gpt)">Orange dot</span> = GPT-5, <span style="color:var(--claude)">blue dot</span> = Claude 4.5. The bar between dots is the gap. Sorted by largest gap within each category.</p>
   <div class="chart-wrapper">
-    <div id="lowDiverging"></div>
+    <div id="lowDumbbell"></div>
+  </div>
+
+  <h2>2b. Intent Comparison Table</h2>
+  <p class="chart-desc">Bar width = frequency per 100 steps. Compare bar lengths within each row to spot differences; compare across rows to see which intents dominate overall.</p>
+  <div class="chart-wrapper">
+    <div id="heatTable"></div>
   </div>
 
   <h2>3. Transition Matrices</h2>
@@ -507,13 +613,13 @@ def render_html(payload: dict) -> str:
     </div>
     <div id="matrixDiff"></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-top:14px;color:var(--muted);font-family:ui-monospace,monospace">
-      <span><strong style="color:var(--text)">R</strong>=read-code</span>
-      <span><strong style="color:var(--text)">S</strong>=search-navigate</span>
+      <span><strong style="color:var(--text)">R</strong>=read</span>
+      <span><strong style="color:var(--text)">S</strong>=search</span>
       <span><strong style="color:var(--text)">P</strong>=reproduce</span>
-      <span><strong style="color:var(--text)">I</strong>=implement</span>
+      <span><strong style="color:var(--text)">E</strong>=edit</span>
       <span><strong style="color:var(--text)">V</strong>=verify</span>
       <span><strong style="color:var(--text)">G</strong>=git</span>
-      <span><strong style="color:var(--text)">F</strong>=infrastructure</span>
+      <span><strong style="color:var(--text)">H</strong>=housekeeping</span>
       <span><strong style="color:var(--text)">X</strong>=failed</span>
       <span><strong style="color:var(--text)">O</strong>=other</span>
     </div>
@@ -576,8 +682,15 @@ const GPT_COLOR = '#f0883e';
 const CLAUDE_COLOR = '#6cb6ff';
 const MUTED = '#546170';
 const TEXT = '#c8d4df';
-const PHASE_LETTERS = ['R','S','P','I','V','G','F','X','O'];
-const PHASE_COLORS = D.high_level_colors;
+
+// Names for display (everywhere except transition matrices)
+const CATEGORY_NAMES = ['read','search','reproduce','edit','verify','git','housekeeping'];
+const NAME_COLORS = D.name_colors;
+
+// Letters for transition matrices only
+const LETTERS = Object.values(D.name_to_letter);
+const LETTER_COLORS = D.letter_colors;
+const LETTER_TO_NAME = D.letter_to_name;
 
 // ── 1. High-Level Bar Chart ──────────────────────────────
 function drawGroupedBar(canvasId, labels, gptVals, claudeVals, labelMap) {{
@@ -665,85 +778,172 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 // ── Draw charts ──────────────────────────────────────────
 
 // 1. High-level
-const highLabels = PHASE_LETTERS;
+const highLabels = CATEGORY_NAMES;
 const gptHigh = highLabels.map(l => D.high_proportions.gpt5[l] || 0);
 const claudeHigh = highLabels.map(l => D.high_proportions.claude45[l] || 0);
-drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, D.high_level_name);
+drawGroupedBar('highChart', highLabels, gptHigh, claudeHigh, null);
 
-// 2. Low-level diverging chart, grouped by category
+// 2. Low-level dumbbell chart, grouped by category
 (function() {{
-  const el = document.getElementById('lowDiverging');
+  const el = document.getElementById('lowDumbbell');
   const intents = D.top_low_intents;
   const catMap = D.intent_to_category || {{}};
+  const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  // Category display order
-  const catOrder = ['R','S','P','I','V','G','F','O'];
-
-  // Build rows with diff
+  // Convert to "per 100 steps"
   const rows = intents.map(intent => {{
-    const g = (D.low_proportions.gpt5[intent] || 0);
-    const c = (D.low_proportions.claude45[intent] || 0);
+    const g = (D.low_proportions.gpt5[intent] || 0) * 100;
+    const c = (D.low_proportions.claude45[intent] || 0) * 100;
     const cat = catMap[intent] || '?';
-    return {{ intent, g, c, diff: g - c, cat }};
+    return {{ intent, g, c, gap: Math.abs(g - c), cat }};
   }});
 
-  // Group by category, within each group sort by abs diff desc
+  // Group by category, sort by gap within each
   const grouped = {{}};
   for (const r of rows) {{
     if (!grouped[r.cat]) grouped[r.cat] = [];
     grouped[r.cat].push(r);
   }}
   for (const cat of Object.keys(grouped)) {{
-    grouped[cat].sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    grouped[cat].sort((a, b) => b.gap - a.gap);
   }}
-
-  // Flatten in category order
   const sorted = [];
   for (const cat of catOrder) {{
     if (grouped[cat]) sorted.push(...grouped[cat]);
   }}
 
-  const maxDiff = Math.max(...sorted.map(r => Math.abs(r.diff)), 0.001);
+  // Scale: 0 to max value, mapped to 8%–92% of track width for label room
+  const maxVal = Math.max(...sorted.map(r => Math.max(r.g, r.c)), 1);
+  const PAD_L = 8;  // % left padding
+  const PAD_R = 92; // % right limit
+  const RANGE = PAD_R - PAD_L;
 
-  // Header
-  let html = `<div class="diverging-header">
-    <div style="text-align:right">intent</div>
-    <div style="text-align:right;color:${{GPT_COLOR}}">GPT</div>
-    <div class="center-labels">
-      <span style="color:${{CLAUDE_COLOR}}">&larr; Claude does more</span>
-      <span style="color:${{GPT_COLOR}}">GPT does more &rarr;</span>
-    </div>
-    <div style="color:${{CLAUDE_COLOR}}">Claude</div>
-  </div>`;
+  function pos(v) {{ return (PAD_L + (v / maxVal) * RANGE).toFixed(2); }}
+
+  // Scale ticks
+  let html = `<div class="dumbbell-header">
+    <div style="text-align:right;font-size:12px">per 100 steps</div>
+    <div class="dumbbell-scale">`;
+  const nTicks = 5;
+  for (let i = 0; i <= nTicks; i++) {{
+    const v = (maxVal * i / nTicks);
+    html += `<span class="dumbbell-scale-tick" style="left:${{pos(v)}}%">${{v.toFixed(0)}}</span>`;
+  }}
+  html += `</div></div>`;
 
   let prevCat = '';
   for (const r of sorted) {{
-    // Category separator
     if (r.cat !== prevCat) {{
-      const catName = D.high_level_name[r.cat] || r.cat;
-      const catColor = PHASE_COLORS[r.cat] || MUTED;
+      const catName = r.cat;
+      const catColor = NAME_COLORS[r.cat] || MUTED;
       html += `<div style="padding:8px 0 4px 0;font-size:12px;font-weight:600;color:${{catColor}};border-top:1px solid var(--border);margin-top:4px">
         ${{r.cat}} ${{catName}}
       </div>`;
       prevCat = r.cat;
     }}
 
-    const barPct = (Math.abs(r.diff) / maxDiff) * 50;
-    const barStyle = r.diff > 0
-      ? `left:50%;width:${{barPct}}%;background:${{GPT_COLOR}}`
-      : `right:50%;width:${{barPct}}%;background:${{CLAUDE_COLOR}}`;
+    const lo = Math.min(r.g, r.c);
+    const hi = Math.max(r.g, r.c);
+    const loPos = pos(lo);
+    const hiPos = pos(hi);
+    const gPos = pos(r.g);
+    const cPos = pos(r.c);
 
-    html += `<div class="diverging-row">
-      <div class="diverging-label">${{r.intent}}</div>
-      <div class="diverging-val left" style="color:${{GPT_COLOR}}">${{(r.g*100).toFixed(1)}}%</div>
-      <div class="diverging-bar-wrap">
-        <div class="diverging-center"></div>
-        <div class="diverging-bar" style="${{barStyle}}"></div>
+    // Bar color: who has more?
+    const barColor = r.g > r.c ? GPT_COLOR : CLAUDE_COLOR;
+
+    // Lower value label to the LEFT of its dot, higher value label to the RIGHT
+    const loModel = r.g <= r.c ? 'g' : 'c';
+    const loColor = loModel === 'g' ? GPT_COLOR : CLAUDE_COLOR;
+    const hiColor = loModel === 'g' ? CLAUDE_COLOR : GPT_COLOR;
+
+    // Hide lower label when dots nearly overlap
+    const showLo = r.gap >= 0.3;
+
+    html += `<div class="dumbbell-row">
+      <div class="dumbbell-label">${{r.intent}}</div>
+      <div class="dumbbell-track">
+        <div class="dumbbell-line" style="left:${{loPos}}%;width:${{(parseFloat(hiPos)-parseFloat(loPos)).toFixed(2)}}%;background:${{barColor}};opacity:0.5"></div>
+        <div class="dumbbell-dot" style="left:calc(${{gPos}}% - 8px);background:${{GPT_COLOR}}"></div>
+        <div class="dumbbell-dot" style="left:calc(${{cPos}}% - 8px);background:${{CLAUDE_COLOR}}"></div>
+        <div class="dumbbell-val" style="right:${{(100 - parseFloat(loPos)).toFixed(2)}}%;text-align:right;padding-right:20px;color:${{loColor}};opacity:${{showLo ? 1 : 0}}">${{lo.toFixed(1)}}</div>
+        <div class="dumbbell-val" style="left:${{hiPos}}%;padding-left:20px;color:${{hiColor}}">${{hi.toFixed(1)}}</div>
       </div>
-      <div class="diverging-val right" style="color:${{CLAUDE_COLOR}}">${{(r.c*100).toFixed(1)}}%</div>
     </div>`;
   }}
 
+  el.innerHTML = html;
+}})();
+
+// 2b. Heat table
+(function() {{
+  const el = document.getElementById('heatTable');
+  const intents = D.top_low_intents;
+  const catMap = D.intent_to_category || {{}};
+  const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
+
+  const rows = intents.map(intent => {{
+    const g = (D.low_proportions.gpt5[intent] || 0) * 100;
+    const c = (D.low_proportions.claude45[intent] || 0) * 100;
+    const cat = catMap[intent] || '?';
+    return {{ intent, g, c, gap: Math.abs(g - c), cat }};
+  }});
+
+  const grouped = {{}};
+  for (const r of rows) {{
+    if (!grouped[r.cat]) grouped[r.cat] = [];
+    grouped[r.cat].push(r);
+  }}
+  for (const cat of Object.keys(grouped)) {{
+    grouped[cat].sort((a, b) => b.gap - a.gap);
+  }}
+  const sorted = [];
+  for (const cat of catOrder) {{
+    if (grouped[cat]) sorted.push(...grouped[cat]);
+  }}
+
+  const maxVal = Math.max(...sorted.map(r => Math.max(r.g, r.c)), 1);
+
+  function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
+
+  let html = `<table class="heat-table">
+    <thead><tr>
+      <th></th>
+      <th class="col-gpt" style="text-align:center">GPT-5</th>
+      <th class="col-claude" style="text-align:center">Claude 4.5</th>
+    </tr></thead><tbody>`;
+
+  let prevCat = '';
+  for (const r of sorted) {{
+    if (r.cat !== prevCat) {{
+      const catName = r.cat;
+      const catColor = NAME_COLORS[r.cat] || MUTED;
+      html += `<tr class="cat-header"><td colspan="3" style="color:${{catColor}}">${{r.cat}} ${{catName}}</td></tr>`;
+      prevCat = r.cat;
+    }}
+
+    const desc = (D.intent_descriptions || {{}})[r.intent] || '';
+    const gBold = r.g > r.c && r.gap >= 0.3;
+    const cBold = r.c > r.g && r.gap >= 0.3;
+
+    html += `<tr>
+      <td class="intent-name">${{r.intent}}${{desc ? `<div class="intent-desc">${{desc}}</div>` : ''}}</td>
+      <td class="bar-cell gpt">
+        <div class="bar-wrap">
+          <div class="bar-bg" style="width:${{barPct(r.g)}}%;background:${{GPT_COLOR}}"></div>
+          <span class="bar-val" style="${{gBold ? 'font-weight:700' : ''}}">${{r.g.toFixed(1)}}</span>
+        </div>
+      </td>
+      <td class="bar-cell claude">
+        <div class="bar-wrap">
+          <div class="bar-bg" style="width:${{barPct(r.c)}}%;background:${{CLAUDE_COLOR}}"></div>
+          <span class="bar-val" style="${{cBold ? 'font-weight:700' : ''}}">${{r.c.toFixed(1)}}</span>
+        </div>
+      </td>
+    </tr>`;
+  }}
+
+  html += '</tbody></table>';
   el.innerHTML = html;
 }})();
 
@@ -810,7 +1010,7 @@ function drawTransitionMatrix(containerId, matrix, mode) {{
       }} else {{
         const intensity = Math.sqrt(v / maxVal);
         const alpha = 0.2 + intensity * 0.8;
-        const color = PHASE_COLORS[letters[r]] || '#6cb6ff';
+        const color = LETTER_COLORS[letters[r]] || '#6cb6ff';
         cell.style.background = color;
         cell.style.opacity = alpha.toFixed(2);
         if (v > 0.001) {{
@@ -899,7 +1099,7 @@ function lerpColor(hex, t) {{
 // Render a heatmap. normalize='row' or 'col'.
 function drawHeatmap(containerId, model, normalize) {{
   const el = document.getElementById(containerId);
-  const letters = ['R','S','P','I','V','G','F'];
+  const letters = ['R','S','P','E','V','G','H'];
   const bins = 20;
 
   // Renormalize: compute per-bin sum across shown letters
@@ -933,9 +1133,9 @@ function drawHeatmap(containerId, model, normalize) {{
   }}
 
   for (const letter of letters) {{
-    const name = D.high_level_name[letter] || letter;
-    const color = PHASE_COLORS[letter];
-    html += `<div class="heatmap-label">${{letter}} ${{name}}</div>`;
+    const name = LETTER_TO_NAME[letter] || letter;
+    const color = LETTER_COLORS[letter];
+    html += `<div class="heatmap-label">${{name}}</div>`;
     const vals = renormed[letter];
     for (let b = 0; b < bins; b++) {{
       const maxV = normalize === 'col' ? (maxPerCol[b] || 0.001) : (maxPerRow[letter] || 0.001);
@@ -967,7 +1167,7 @@ function drawStackedArea(canvasId, model) {{
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
-  const letters = ['R','S','P','I','V','G','F'];
+  const letters = ['R','S','P','E','V','G','H'];
 
   // Build stacked values
   const stacked = [];
@@ -991,7 +1191,7 @@ function drawStackedArea(canvasId, model) {{
   // Draw from bottom layer up
   for (let s = stacked.length - 1; s >= 0; s--) {{
     const layer = stacked[s];
-    ctx.fillStyle = PHASE_COLORS[layer.letter] || '#555';
+    ctx.fillStyle = LETTER_COLORS[layer.letter] || '#555';
     ctx.globalAlpha = 0.8;
     ctx.beginPath();
     // Top edge left to right
@@ -1017,11 +1217,11 @@ function drawStackedArea(canvasId, model) {{
 }}
 
 function fillStackedLegend(legendId) {{
-  const letters = ['R','S','P','I','V','G','F'];
+  const letters = ['R','S','P','E','V','G','H'];
   const el = document.getElementById(legendId);
   el.innerHTML = letters.map(l => {{
-    const name = D.high_level_name[l] || l;
-    return `<div class="item"><div class="swatch" style="background:${{PHASE_COLORS[l]}}"></div>${{l}} ${{name}}</div>`;
+    const name = LETTER_TO_NAME[l] || l;
+    return `<div class="item"><div class="swatch" style="background:${{LETTER_COLORS[l]}}"></div>${{name}}</div>`;
   }}).join('');
 }}
 

@@ -81,32 +81,32 @@ SEQUENCE_SEARCH_INTENTS = {
 
 # Third-layer hierarchical grouping: <high-level>.<base-intent>
 INTENT_TO_HIGH_LEVEL = {
-    # read-code
-    "read-file-full": "read-code",
-    "read-file-range": "read-code",
-    "read-file-full(truncated)": "read-code",
-    "read-test-file": "read-code",
-    "read-config-file": "read-code",
-    "read-via-bash": "read-code",
+    # read
+    "read-file-full": "read",
+    "read-file-range": "read",
+    "read-file-full(truncated)": "read",
+    "read-test-file": "read",
+    "read-config-file": "read",
+    "read-via-bash": "read",
 
-    # search-navigate
-    "view-directory": "search-navigate",
-    "list-directory": "search-navigate",
-    "search-keyword": "search-navigate",
-    "search-files-by-name": "search-navigate",
-    "search-files-by-content": "search-navigate",
-    "inspect-file-metadata": "search-navigate",
+    # search
+    "view-directory": "search",
+    "list-directory": "search",
+    "search-keyword": "search",
+    "search-files-by-name": "search",
+    "search-files-by-content": "search",
+    "inspect-file-metadata": "search",
 
     # reproduce
     "create-repro-script": "reproduce",
     "run-repro-script": "reproduce",
     "run-inline-snippet": "reproduce",
 
-    # implement
-    "edit-source": "implement",
-    "insert-source": "implement",
-    "apply-patch": "implement",
-    "create-file": "implement",
+    # edit
+    "edit-source": "edit",
+    "insert-source": "edit",
+    "apply-patch": "edit",
+    "create-file": "edit",
 
     # verify
     "run-test-suite": "verify",
@@ -124,12 +124,12 @@ INTENT_TO_HIGH_LEVEL = {
     "git-status-log": "git",
     "git-stash": "git",
 
-    # infrastructure
-    "file-cleanup": "infrastructure",
-    "create-documentation": "infrastructure",
-    "start-service": "infrastructure",
-    "install-deps": "infrastructure",
-    "check-tool-exists": "infrastructure",
+    # housekeeping
+    "file-cleanup": "housekeeping",
+    "create-documentation": "housekeeping",
+    "start-service": "housekeeping",
+    "install-deps": "housekeeping",
+    "check-tool-exists": "housekeeping",
 
     # failed
     "search-keyword(failed)": "failed",
