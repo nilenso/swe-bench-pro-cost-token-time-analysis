@@ -48,10 +48,12 @@ SEQUENCE_VERIFY_INTENTS = {
     "run-custom-script",
     "compile-build",
     "syntax-check",
+    "run-inline-verify",
 }
 SEQUENCE_REPRO_INTENTS = {
     "run-repro-script",
     "run-inline-snippet",
+    "read-via-inline-script",
 }
 SEQUENCE_EDIT_INTENTS = {
     "edit-source",
@@ -59,6 +61,8 @@ SEQUENCE_EDIT_INTENTS = {
     "apply-patch",
     "edit-test-or-repro",
     "create-file",
+    "edit-via-inline-script",
+    "create-file-via-inline-script",
 }
 SEQUENCE_FAILED_VERIFY_INTENTS = {
     "run-test-suite(failed)",
@@ -101,6 +105,13 @@ INTENT_TO_HIGH_LEVEL = {
     "create-repro-script": "reproduce",
     "run-repro-script": "reproduce",
     "run-inline-snippet": "reproduce",
+
+    # inline snippet sub-intents (reclassified from run-inline-snippet)
+    "run-inline-verify": "verify",
+    "read-via-inline-script": "read",
+    "edit-via-inline-script": "edit",
+    "create-file-via-inline-script": "edit",
+    "check-version": "search",
 
     # edit
     "edit-source": "edit",
@@ -339,6 +350,80 @@ def _extract_script_filename(cmd: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Inline snippet sub-classification
+# ---------------------------------------------------------------------------
+# Pre-compiled patterns for classifying python -c / python - << / node -e code.
+_RE_PY_WRITE = re.compile(r"write_text|\.write\(|open\(.+['\"]w['\"]", re.IGNORECASE)
+_RE_PY_READ = re.compile(r"read_text|\.read\(|open\(.+['\"]r['\"]", re.IGNORECASE)
+_RE_NODE_WRITE = re.compile(r"writefilesync|writefile\s*\(", re.IGNORECASE)
+_RE_NODE_READ = re.compile(r"readfilesync|readfile\s*\(", re.IGNORECASE)
+_RE_MODIFY = re.compile(r"\.replace\(|re\.sub\(", re.IGNORECASE)
+_RE_PY_IMPORT = re.compile(r"^(?:from|import)\s+\S+", re.MULTILINE)
+_RE_NODE_REQUIRE = re.compile(r"require\s*\(", re.IGNORECASE)
+_RE_ASSERT = re.compile(
+    r"\bassert\s|\bassert\(|assertequal|asserttrue|\.tobe\(|\.toequal\(|\bexpect\(",
+    re.IGNORECASE,
+)
+_RE_PRINT = re.compile(r"print\(|console\.log", re.IGNORECASE)
+_RE_VERSION_CHECK = re.compile(r"--version\b|-V\b|sys\.version|node\s+-v|npm\s+-v", re.IGNORECASE)
+
+
+def _classify_inline_snippet(cmd: str) -> str:
+    """Sub-classify an inline snippet (python -c / python - << / node -e).
+
+    Returns one of:
+      edit-via-inline-script     — reads file, modifies, writes back
+      create-file-via-inline-script — writes file without reading first
+      read-via-inline-script     — reads file content, prints/inspects
+      run-inline-verify          — imports project code / runs assertions / logic checks
+      check-version              — checks python/node version
+      run-inline-snippet         — residual (unclassifiable)
+    """
+    lower = cmd.lower()
+
+    # --- File write detection (python + node) ---
+    has_write = bool(_RE_PY_WRITE.search(lower) or _RE_NODE_WRITE.search(lower))
+    has_read = bool(_RE_PY_READ.search(lower) or _RE_NODE_READ.search(lower))
+    has_modify = bool(_RE_MODIFY.search(lower))
+
+    if has_write and (has_read or has_modify):
+        return "edit-via-inline-script"
+    if has_write and not has_read:
+        return "create-file-via-inline-script"
+
+    # --- Import detection (python + node) ---
+    has_import = bool(_RE_PY_IMPORT.search(cmd) or _RE_NODE_REQUIRE.search(lower))
+    has_print = bool(_RE_PRINT.search(lower))
+    has_assert = bool(_RE_ASSERT.search(lower))
+
+    # --- Test with assertions ---
+    if has_import and has_assert:
+        return "run-inline-verify"
+
+    # --- Read and inspect ---
+    if has_read and not has_write:
+        return "read-via-inline-script"
+
+    # --- Import and check (imports project code, prints results) ---
+    if has_import and has_print:
+        return "run-inline-verify"
+
+    # --- Import only (smoke test — does it crash?) ---
+    if has_import and not has_print:
+        return "run-inline-verify"
+
+    # --- Version check ---
+    if _RE_VERSION_CHECK.search(lower):
+        return "check-version"
+
+    # --- Print/logic check (no imports, no file ops, but has print) ---
+    if has_print:
+        return "run-inline-verify"
+
+    return "run-inline-snippet"
+
+
+# ---------------------------------------------------------------------------
 # Verify outcome detection
 # ---------------------------------------------------------------------------
 # Intents whose observation can be parsed for pass/fail outcome.
@@ -349,6 +434,7 @@ VERIFY_OUTCOME_INTENTS = {
     "run-custom-script",
     "compile-build",
     "syntax-check",
+    "run-inline-verify",
 }
 
 # Source-only edits (excludes test/repro edits, excludes create-file which is
@@ -357,6 +443,7 @@ SOURCE_EDIT_INTENTS = {
     "edit-source",
     "insert-source",
     "apply-patch",
+    "edit-via-inline-script",
 }
 
 # Pre-compiled patterns for test-runner summary parsing.
@@ -646,7 +733,7 @@ def classify_step(action: str, observation: str = "") -> str:
         if "-c " in cmd_for_match or "- <<" in cmd_for_match or "-e " in cmd_for_match:
             if "node" in cmd_head_lower and "-c " in cmd_for_match.lower():
                 return "syntax-check"
-            return "run-inline-snippet"
+            return _classify_inline_snippet(cmd_for_match)
 
         return _classify_script_name(_extract_script_filename(cmd_for_match))
 

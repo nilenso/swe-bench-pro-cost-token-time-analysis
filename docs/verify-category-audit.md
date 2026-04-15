@@ -299,10 +299,38 @@ failing test 5+ times, never fixes it, submits anyway. The verify steps look
 like confirmation on the heatmap but are actually failed problem-solving.
 
 
+## Inline snippet reclassification (2026-04-15)
+
+The original classifier put all `python -c` / `python - <<` / `node -e`
+commands into `run-inline-snippet` under "reproduce." Auditing these revealed
+they serve very different purposes:
+
+| Sub-intent | High-level | Count | % |
+|---|---|---|---|
+| `run-inline-verify` | verify | 1,923 | 61% |
+| `read-via-inline-script` | read | 490 | 16% |
+| `edit-via-inline-script` | edit | 303 | 10% |
+| `create-file-via-inline-script` | edit | 89 | 3% |
+| `check-version` | search | 71 | 2% |
+| `run-inline-snippet` (residual) | reproduce | 253 | 8% |
+
+The reclassification reduced "reproduce" by half (Claude 2,111 → 1,004,
+GPT 3,080 → 1,723). Most of what appeared as late-phase reproduction was
+actually `python -c` spot-checks (verification) or GPT editing source files
+via Python string replacement instead of the editor tool.
+
+GPT uses `edit-via-inline-script` 3.6x more than Claude (245 vs 68). This
+is GPT's alternative to `str_replace_editor` — it reads a file with
+`Path.read_text()`, calls `.replace()`, and writes it back. The classifier
+previously counted this as "reproduce," inflating GPT's reproduction band
+in the late phase of the trajectory shape chart.
+
+
 ## When does each model stop writing code?
 
 The cleanest structural marker is **last source edit** — the last step where
-the agent runs `str_replace` or `insert` on a non-test source file. This is
+the agent modifies a source file, whether via `str_replace`, `insert`, or
+`python -c` file editing (now classified as `edit-via-inline-script`). This is
 purely mechanical, requires no outcome parsing, and has an unambiguous meaning:
 the agent stopped modifying the actual code at this point.
 
@@ -360,16 +388,19 @@ errors — returning `pass`, `fail`, or unknown per step.
   the benchmark's hidden test suite is run. Independent of whatever tests the
   agent chose to run.
 
-**Verify outcomes across all trajectories:**
+**Verify outcomes across all trajectories (after inline snippet reclassification):**
 
 | | Claude 4.5 | GPT-5 |
 |---|---|---|
-| Total verify steps | 15,880 (28% of steps) | 1,546 (3.6% of steps) |
-| verify-pass | 5,271 | 311 |
-| verify-fail | 1,279 | 365 |
-| pass rate (of detected) | 80% | 46% |
+| Total verify steps | 16,879 (30% of steps) | 2,242 (5.2% of steps) |
+| verify-pass | 5,276 | 338 |
+| verify-fail | 1,323 | 445 |
+| pass rate (of detected) | 80% | 43% |
 
-Claude runs ~10x more test commands than GPT. 80% of Claude's detectable
+Verify step counts increased after reclassifying `run-inline-snippet` —
+many `python -c` spot-checks that were previously "reproduce" are now
+correctly classified as `run-inline-verify` under "verify." Claude still
+runs ~7.5x more verify commands than GPT. 80% of Claude's detectable
 verify outcomes are passes. This sounds good until you cross-reference with
 the benchmark: in 280 trajectories, Claude's chosen tests pass but the issue
 isn't resolved. The agent picks which tests to run, and it picks ones that

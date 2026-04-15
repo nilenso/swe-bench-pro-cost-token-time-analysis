@@ -25,7 +25,15 @@ first edit) is used.
 ### Reproducing
 - `create-repro-script` — create a file named repro*, reproduce*, demo*
 - `run-repro-script` — run a file named repro*, reproduce*, demo*
-- `run-inline-snippet` — python -c, python - <<, python3 -c, node -e (inline code)
+- `run-inline-snippet` — python -c, python - <<, node -e (residual: inline code that
+  doesn't match any sub-classification below)
+
+### Inline snippet sub-classification (applied to python -c / python - << / node -e)
+- `run-inline-verify` — imports project code, runs assertions, or prints logic checks
+- `read-via-inline-script` — reads file content, prints/inspects it
+- `edit-via-inline-script` — reads file, modifies with .replace()/re.sub(), writes back
+- `create-file-via-inline-script` — writes a new file without reading first
+- `check-version` — python -V, node -v, sys.version
 
 ### Implementing
 - `edit-source` — str_replace on a non-test, non-repro source file
@@ -205,11 +213,11 @@ function classify_step(action, observation):
     # ── Run python/node script ──
     if cmd_lower starts with {python , python3 , node }:
 
-        # Inline snippet
+        # Inline snippet — sub-classified by code structure
         if cmd contains "-c " or cmd contains "- <<" or cmd contains "-e ":
             if "node" in cmd and "-c " in cmd:     # node -c is syntax check
                 return "syntax-check"
-            return "run-inline-snippet"
+            return classify_inline_snippet(cmd)    # see below
 
         # Named script — extract filename
         script_name = extract_script_filename(cmd).lowercase()
@@ -257,15 +265,51 @@ function classify_step(action, observation):
     return "bash-other"
 ```
 
+### Inline snippet sub-classification (pseudocode)
+
+```
+function classify_inline_snippet(cmd):
+    # Detect file I/O (python and node patterns)
+    has_write = cmd matches (write_text | .write( | open(...'w') |
+                             writeFileSync | writeFile()
+    has_read  = cmd matches (read_text | .read( | open(...'r') |
+                             readFileSync | readFile()
+    has_modify = cmd matches (.replace( | re.sub()
+
+    # File editing: reads + modifies + writes
+    if has_write and (has_read or has_modify):
+        return "edit-via-inline-script"
+    if has_write and not has_read:
+        return "create-file-via-inline-script"
+
+    # Import detection (python + node)
+    has_import = cmd matches (^from|^import | require()
+    has_print  = cmd matches (print( | console.log)
+    has_assert = cmd matches (assert | assertEqual | expect( | .toBe()
+
+    if has_import and has_assert:  return "run-inline-verify"
+    if has_read and not has_write: return "read-via-inline-script"
+    if has_import and has_print:   return "run-inline-verify"
+    if has_import:                 return "run-inline-verify"    # smoke test
+    if cmd matches (--version | -V | sys.version | node -v):
+                                   return "check-version"
+    if has_print:                  return "run-inline-verify"    # logic check
+
+    return "run-inline-snippet"    # residual
+```
+
 ## Notes
 
 - No positional context is used. Every classification is derived from the command
   string and filename alone.
 - The `(failed)` variants classify by intended action, not by outcome. A failed grep
   is still a search attempt.
-- `run-inline-snippet` captures python -c, python - <<, node -e. These are ambiguous
-  in purpose (could be exploration, reproduction, or verification) but structurally
-  distinct from running a named script.
+- `run-inline-snippet` was originally a catch-all for python -c, python - <<, node -e.
+  As of 2026-04-15, these are sub-classified by code structure into
+  `run-inline-verify`, `read-via-inline-script`, `edit-via-inline-script`,
+  `create-file-via-inline-script`, and `check-version`. The residual
+  `run-inline-snippet` (8% of inline snippets) captures code that doesn't match
+  any structural pattern.
 - `run-custom-script` is the catch-all for named scripts that don't match
   repro/test/verify filename patterns.
 - `create-file` is the catch-all for created files that don't match any pattern.
@@ -429,9 +473,9 @@ Subset sanity:
 Implemented in: `scripts/classify_intent.py` (`classify_verify_outcome`)
 
 For verify-run intents (`run-test-suite`, `run-test-specific`, `run-verify-script`,
-`run-custom-script`, `compile-build`, `syntax-check`), the observation field is
-parsed for unambiguous pass/fail signals. Returns `'pass'`, `'fail'`, or `''`
-(unknown).
+`run-custom-script`, `compile-build`, `syntax-check`, `run-inline-verify`), the
+observation field is parsed for unambiguous pass/fail signals. Returns `'pass'`,
+`'fail'`, or `''` (unknown).
 
 ### Parsed summary formats
 
@@ -455,17 +499,13 @@ parsed for unambiguous pass/fail signals. Returns `'pass'`, `'fail'`, or `''`
 - The outcome is per-step, not per-test. A step where 80 tests pass and 1
   fails is classified as `'fail'`.
 
-### Aggregate stats (2026-04-14)
+### Aggregate stats (2026-04-15, after inline snippet reclassification)
 
 | | Claude 4.5 | GPT-5 |
 |---|---|---|
-| verify-pass | 5,271 | 111 |
-| verify-fail | 1,244 | 171 |
-| unknown | ~7,000 | ~1,000 |
-| pass rate (of detected) | 81% | 39% |
-
-GPT-5 rarely runs structured test suites (585 `run-test-suite` vs Claude's
-5,942), so most of its verify steps produce undetectable outcomes.
+| verify-pass | 5,276 | 338 |
+| verify-fail | 1,323 | 445 |
+| pass rate (of detected) | 80% | 43% |
 
 ## Sequence markers: first-all-pass and work-done
 
@@ -479,7 +519,8 @@ Two retrospective markers that use verify outcomes + source edit positions:
 The first verify step where:
 1. The outcome is `'pass'`, AND
 2. The step occurs after the **last source edit** (`edit-source`, `insert-source`,
-   `apply-patch` — excludes `create-file` which is often a throwaway script)
+   `apply-patch`, `edit-via-inline-script` — excludes `create-file` which is often
+   a throwaway script)
 
 This marks the first moment the tests confirm the implementation works, after
 the agent has stopped modifying source files.
@@ -506,18 +547,15 @@ one (e.g. tests keep failing), neither marker is emitted.
 - **No outcome = no marker**: Trajectories where the agent only runs custom
   verify scripts with ambiguous output won't get `work-done`.
 
-### Aggregate stats (2026-04-14)
+### Aggregate stats (2026-04-15, after inline snippet reclassification)
 
 | | Claude 4.5 | GPT-5 |
 |---|---|---|
-| Trajectories with `seq-work-done` | 592 / 730 (81%) | 26 / 730 (4%) |
-| Mean steps after work-done | 25.6 | — |
-| Median steps after work-done | 25 | — |
-| Mean work-done position | 66% of trajectory | — |
-| Total post-work-done steps | 15,143 | — |
+| Trajectories with `seq-work-done` | 592 / 730 (81%) | 82 / 730 (11%) |
 
-For Claude, work-done fires at the 66% mark on average, meaning the remaining
-34% of the trajectory is post-completion activity.
+GPT's work-done count increased from 26 to 82 after reclassification because
+`run-inline-verify` (formerly `run-inline-snippet`) is now in the verify set
+and can trigger work-done.
 
 ## Hierarchical intent layer (high-level categories + dot notation)
 
@@ -550,9 +588,13 @@ categories. Output labels are emitted as:
 - `reproduce.*`
   - `create-repro-script`, `run-repro-script`, `run-inline-snippet`
 - `implement.*`
-  - `edit-source`, `insert-source`, `apply-patch`, `create-file`
+  - `edit-source`, `insert-source`, `apply-patch`, `create-file`, `edit-via-inline-script`, `create-file-via-inline-script`
 - `verify.*`
-  - `run-test-suite`, `run-test-specific`, `create-test-script`, `run-verify-script`, `create-verify-script`, `edit-test-or-repro`, `run-custom-script`, `syntax-check`, `compile-build`
+  - `run-test-suite`, `run-test-specific`, `create-test-script`, `run-verify-script`, `create-verify-script`, `edit-test-or-repro`, `run-custom-script`, `syntax-check`, `compile-build`, `run-inline-verify`
+- `read-code.*` (also includes)
+  - `read-via-inline-script`
+- `search-navigate.*` (also includes)
+  - `check-version`
 - `git.*`
   - `git-diff`, `git-inspect`, `git-stash`
 - `infrastructure.*`
