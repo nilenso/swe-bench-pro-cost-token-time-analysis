@@ -1044,7 +1044,7 @@ drawHeatmap('heatmapClaude', 'claude45', 'row');
 // 6. Stacked area charts — 5 grouped bands, inline labels
 function drawStackedArea(canvasId, model, annotations, markers) {{
   const {{ ctx, w, h }} = getCtx(canvasId);
-  const left = 40, right = 20, top = 10, bot = 20;
+  const left = 40, right = 20, top = 30, bot = 10;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
@@ -1103,9 +1103,24 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   }}
   ctx.globalAlpha = 1;
 
-  // 50% vertical reference line
-  const halfX = xAt(10); // bin 10 = 50%
-  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  // X-axis ticks and labels ABOVE the chart
+  ctx.fillStyle = MUTED; ctx.font = '9px Palatino, Georgia, serif'; ctx.textAlign = 'center';
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5;
+  for (let i = 0; i < bins; i++) {{
+    if (i % 5 === 0) {{
+      const x = xAt(i);
+      ctx.fillText(i * 5 + '%', x, top - 8);
+      // Small tick down into chart
+      ctx.beginPath();
+      ctx.moveTo(x, top - 3);
+      ctx.lineTo(x, top + 4);
+      ctx.stroke();
+    }}
+  }}
+
+  // 50% vertical reference line (dashed, subtle)
+  const halfX = xAt(10);
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
   ctx.beginPath();
@@ -1114,111 +1129,50 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Vertical markers
+  // Vertical markers above chart with ticks down
   if (markers) {{
     for (const m of markers) {{
-      const mx = xAt(m.at / 5); // at% maps to bin at/5
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      const mx = xAt(m.at / 5);
+      // Solid line through chart
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
       ctx.lineWidth = 1;
-      ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(mx, top);
       ctx.lineTo(mx, top + plotH);
       ctx.stroke();
-      // Small label at top
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      // Label above
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.font = '9px Palatino, Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText(m.label, mx, top - 3);
+      ctx.fillText(m.label, mx, top - 8);
     }}
   }}
 
-  // X labels
-  ctx.fillStyle = MUTED; ctx.font = '10px Palatino, Georgia, serif'; ctx.textAlign = 'center';
-  for (let i = 0; i < bins; i++) {{
-    if (i % 5 === 0) ctx.fillText(i * 5 + '%', xAt(i), top + plotH + 16);
-  }}
-
-  // Annotations: brackets inside the chart area
-  if (annotations) {{
-    ctx.lineWidth = 0.8;
-
-    for (let ai = 0; ai < annotations.length; ai++) {{
-      const a = annotations[ai];
-      const fromBin = a.from / 5;
-      const toBin = a.to / 5;
-      const midBin = (fromBin + toBin) / 2;
-      const x0 = xAt(fromBin);
-      const x1 = xAt(toBin);
-
-      // Find the vertical midpoint of the target band at the annotation's center
-      const gi = groups.findIndex(g => g.color === a.color);
-      const midBinInt = Math.round(midBin);
-      const bandTop = yAt(stacked[gi].top[midBinInt], midBinInt);
-      const bandBot = yAt(stacked[gi].bottom[midBinInt], midBinInt);
-      const bandH = Math.abs(bandBot - bandTop);
-      const midY = (bandTop + bandBot) / 2;
-
-      // Bracket
-      ctx.strokeStyle = '#fff';
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(x0, midY); ctx.lineTo(x1, midY);
-      ctx.moveTo(x0, midY - 4); ctx.lineTo(x0, midY + 4);
-      ctx.moveTo(x1, midY - 4); ctx.lineTo(x1, midY + 4);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Label: if band is thick enough, place inside. Otherwise, place above with a connecting line.
-      ctx.font = '9.5px Palatino, Georgia, serif';
-      ctx.textAlign = 'center';
-      const labelX = (x0 + x1) / 2;
-
-      if (bandH > 30) {{
-        // Inside the band
-        ctx.fillStyle = '#fff';
-        ctx.globalAlpha = 0.9;
-        ctx.fillText(a.label, labelX, midY - 7);
-        ctx.globalAlpha = 1;
-      }} else {{
-        // Outside the band with a small connecting line
-        // Place below if near the top edge, above otherwise
-        const placeBelow = bandTop < top + 30;
-        const labelY = placeBelow ? bandBot + 4 : bandTop - 8;
-        const lineEnd = placeBelow ? bandBot : bandTop;
-        const lineStart = placeBelow ? labelY - 10 : labelY + 3;
-        ctx.fillStyle = '#fff';
-        ctx.globalAlpha = 0.9;
-        ctx.fillText(a.label, labelX, labelY);
-        // Thin connecting line
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(labelX, lineStart);
-        ctx.lineTo(labelX, lineEnd);
-        ctx.stroke();
-        ctx.lineWidth = 0.8;
-      }}
+  // Inline band labels: place name inside band, avoiding edges
+  for (let s = 0; s < stacked.length; s++) {{
+    const layer = stacked[s];
+    // Search for thickest bin within the middle range (bins 2 to bins-3) to avoid edge clipping
+    const searchFrom = 2;
+    const searchTo = bins - 3;
+    let bestBin = Math.floor(bins / 2), bestH = 0;
+    for (let i = searchFrom; i <= searchTo; i++) {{
+      const h = Math.abs(yAt(layer.bottom[i], i) - yAt(layer.top[i], i));
+      if (h > bestH) {{ bestH = h; bestBin = i; }}
     }}
+    if (bestH < 16) continue; // too thin to label
+    const midY = (yAt(layer.top[bestBin], bestBin) + yAt(layer.bottom[bestBin], bestBin)) / 2;
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.85;
+    ctx.font = '10px Palatino, Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(layer.group.name, xAt(bestBin), midY + 4);
+    ctx.globalAlpha = 1;
   }}
 }}
 
-const gptAnnotations = [
-  {{ from: 2, to: 50, label: 'understand', color: '#5a7d9a' }},
-  {{ from: 50, to: 80, label: 'edit', color: '#4a8a5a' }},
-  {{ from: 85, to: 98, label: 'verify', color: '#b56a50' }},
-  {{ from: 78, to: 98, label: 'reproduce', color: '#b0956a' }},
-];
-const claudeAnnotations = [
-  {{ from: 2, to: 30, label: 'understand', color: '#5a7d9a' }},
-  {{ from: 30, to: 55, label: 'edit', color: '#4a8a5a' }},
-  {{ from: 60, to: 80, label: 'verify', color: '#b56a50' }},
-  {{ from: 80, to: 98, label: 'cleanup', color: '#3a8a8a' }},
-];
-
-drawStackedArea('stackedGpt', 'gpt5', gptAnnotations,
+drawStackedArea('stackedGpt', 'gpt5', null,
   [{{ at: 89, label: 'median last edit (89%)' }}]);
-drawStackedArea('stackedClaude', 'claude45', claudeAnnotations,
+drawStackedArea('stackedClaude', 'claude45', null,
   [{{ at: 61, label: 'median last edit (61%)' }}]);
 
 </script>
