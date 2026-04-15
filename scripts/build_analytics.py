@@ -347,8 +347,8 @@ def render_html(payload: dict) -> str:
       --text: #333;
       --accent: #5a7d9a;
       --border: #ddd;
-      --gpt: #b07040;
-      --claude: #5a7d9a;
+      --claude: #b8785e;
+      --gpt: #6a8da8;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -691,8 +691,8 @@ function getCtx(id) {{
   return {{ canvas: c, ctx, w: cssW, h: cssH }};
 }}
 
-const GPT_COLOR = '#b07040';
-const CLAUDE_COLOR = '#5a7d9a';
+const CLAUDE_COLOR = '#b8785e';
+const GPT_COLOR = '#6a8da8';
 const MUTED = '#6b7280';
 const TEXT = '#1a1a1a';
 
@@ -1104,7 +1104,7 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   ctx.globalAlpha = 1;
 
   // 50% vertical reference line
-  const halfX = xAt((bins - 1) / 2);
+  const halfX = xAt(10); // bin 10 = 50%
   ctx.strokeStyle = 'rgba(0,0,0,0.15)';
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
@@ -1117,7 +1117,7 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   // Vertical markers
   if (markers) {{
     for (const m of markers) {{
-      const mx = xAt((m.at / 100) * (bins - 1));
+      const mx = xAt(m.at / 5); // at% maps to bin at/5
       ctx.strokeStyle = 'rgba(0,0,0,0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
@@ -1145,8 +1145,8 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
 
     for (let ai = 0; ai < annotations.length; ai++) {{
       const a = annotations[ai];
-      const fromBin = (a.from / 100) * (bins - 1);
-      const toBin = (a.to / 100) * (bins - 1);
+      const fromBin = a.from / 5;
+      const toBin = a.to / 5;
       const midBin = (fromBin + toBin) / 2;
       const x0 = xAt(fromBin);
       const x1 = xAt(toBin);
@@ -1217,9 +1217,9 @@ const claudeAnnotations = [
 ];
 
 drawStackedArea('stackedGpt', 'gpt5', gptAnnotations,
-  [{{ at: 90, label: 'median last edit' }}]);
+  [{{ at: 89, label: 'median last edit (89%)' }}]);
 drawStackedArea('stackedClaude', 'claude45', claudeAnnotations,
-  [{{ at: 60, label: 'median last edit' }}]);
+  [{{ at: 61, label: 'median last edit (61%)' }}]);
 
 </script>
 </body>
