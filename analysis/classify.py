@@ -86,26 +86,41 @@ def _parse_repo(instance_id: str) -> str:
     return f"{org}/{repo}"
 
 
-def _check_eval_resolved(traj_path: str) -> bool:
-    """Check if the eval _output.json shows all tests passing.
+def _load_resolution_map() -> dict[str, dict[str, bool]]:
+    """Load resolution data from the benchmark CSV.
 
-    The eval dir mirrors the traj dir structure:
-      data/{model}/traj/{instance_id}/{instance_id}.traj
-      data/{model}/eval/{instance_id}/_output.json
+    Returns {model_dir_name: {instance_id: resolved}}.
+    The CSV has the authoritative resolution status from the benchmark
+    platform, which applies the patch and runs tests. The eval/ directories
+    in the data folder are NOT reliable for this (they may test the baseline
+    code when no patch was submitted).
     """
-    traj = Path(traj_path)
-    instance_id = traj.stem
-    # Navigate: .../traj/{instance_dir}/{file}.traj -> .../eval/{instance_dir}/_output.json
-    eval_json = traj.parent.parent.parent / "eval" / traj.parent.name / "_output.json"
-    if not eval_json.exists():
-        return False
-    try:
-        import json
-        data = json.loads(eval_json.read_bytes())
-        tests = data.get("tests", [])
-        return bool(tests) and all(t.get("status") == "PASSED" for t in tests)
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return False
+    csv_path = Path(__file__).parent.parent / "data" / "agent_runs_data.csv"
+    if not csv_path.exists():
+        return {}
+
+    import csv
+    # Map CSV model names to our directory names
+    csv_to_dir = {
+        "Claude 4.5 Sonnet - 10132025": "claude45",
+        "GPT-5 - 10132025": "gpt5",
+        "GLM-4.5 -- 10222025": "glm45",
+        # Gemini: no matching CSV entry for our data
+    }
+
+    result: dict[str, dict[str, bool]] = {}
+    with open(csv_path) as f:
+        for row in csv.DictReader(f):
+            dir_name = csv_to_dir.get(row["metadata.model_name"])
+            if dir_name:
+                result.setdefault(dir_name, {})[row["metadata.instance_id"]] = (
+                    row["metadata.resolved"] == "true"
+                )
+    return result
+
+
+# Loaded once at import time
+_RESOLUTION_MAP: dict[str, dict[str, bool]] = _load_resolution_map()
 
 
 def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | None:
@@ -164,8 +179,8 @@ def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | N
     submitted = (info.get("exit_status") or "").startswith("submitted") or bool(info.get("submission"))
 
     # Resolution: did the patch actually fix the tests?
-    # Check the eval _output.json alongside the traj file
-    resolved = _check_eval_resolved(path)
+    # From the benchmark CSV (authoritative), not from eval/ dirs on disk.
+    resolved = _RESOLUTION_MAP.get(model, {}).get(instance_id, False)
 
     # Phase profile: binned activity proportions across trajectory
     phase_profile: dict[str, list[float]] = {}

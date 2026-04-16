@@ -639,61 +639,138 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   }}
 }})();
 
-// 3. Step distribution
+// 3. Step distribution — overlaid ECDFs
 (function() {{
   const {{ ctx, w, h }} = getCtx('stepDistChart');
-  const left = 50, right = 20, top = 20, bot = 50;
-  const allBins = new Set();
-  for (const m of ALL_MODELS) {{
-    for (const k of Object.keys(D.step_dist[m])) allBins.add(Number(k));
-  }}
-  const bins = [...allBins].sort((a,b) => a - b);
+  const left = 54, right = 150, top = 20, bot = 46;
+  const xMax = 250;
   const plotW = w - left - right;
   const plotH = h - top - bot;
-  const n = bins.length;
-  const nm = ALL_MODELS.length;
-  const groupW = plotW / n;
-  const barW = groupW * 0.8 / nm;
+  const xPx = x => left + (x / xMax) * plotW;
+  const yPx = y => top + (1 - y) * plotH;
 
-  const totals = {{}};
-  const modelVals = {{}};
+  // Build ECDF points per model from binned step counts
+  const cdfs = {{}};
   for (const m of ALL_MODELS) {{
-    totals[m] = Object.values(D.step_dist[m]).reduce((a,b) => a+b, 0) || 1;
-    modelVals[m] = bins.map(b => (D.step_dist[m][b] || 0) / totals[m]);
+    const entries = Object.entries(D.step_dist[m])
+      .map(([k, v]) => [Number(k), v])
+      .sort((a, b) => a[0] - b[0]);
+    const total = entries.reduce((s, [, v]) => s + v, 0) || 1;
+    let cum = 0;
+    const pts = [[0, 0]];
+    for (const [bin, count] of entries) {{
+      cum += count;
+      pts.push([Math.min(bin, xMax), cum / total]);
+    }}
+    if (pts[pts.length - 1][1] < 1) pts.push([xMax, 1]);
+    cdfs[m] = pts;
   }}
 
-  let maxVal = 0.01;
-  for (const m of ALL_MODELS) {{
-    for (const v of modelVals[m]) if (v > maxVal) maxVal = v;
-  }}
-
+  // Horizontal guides at 0.25, 0.5, 0.75
   ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {{
-    const y = top + plotH - (i / 4) * plotH;
-    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(w - right, y); ctx.stroke();
-    ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'right';
-    ctx.fillText((maxVal * i / 4 * 100).toFixed(0) + '%', left - 6, y + 4);
+  ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  for (const yv of [0, 0.25, 0.5, 0.75, 1]) {{
+    const py = yPx(yv);
+    if (yv === 0.25 || yv === 0.5 || yv === 0.75) {{
+      ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(left + plotW, py); ctx.stroke();
+    }}
+    ctx.fillStyle = MUTED;
+    ctx.fillText(yv.toFixed(2), left - 6, py + 3);
   }}
 
-  for (let i = 0; i < n; i++) {{
-    const x0 = left + i * groupW + groupW * 0.05;
-    ctx.globalAlpha = 0.85;
-    for (let mi = 0; mi < nm; mi++) {{
-      const m = ALL_MODELS[mi];
-      const v = modelVals[m][i];
-      const bH = (v / maxVal) * plotH;
-      ctx.fillStyle = MODEL_COLORS[m];
-      ctx.fillRect(x0 + mi * (barW + 1), top + plotH - bH, barW, bH);
-    }}
-    ctx.globalAlpha = 1;
+  // Baseline + cap rule
+  ctx.strokeStyle = '#cfcfcf'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(left, yPx(0)); ctx.lineTo(left + plotW, yPx(0)); ctx.stroke();
 
-    if (i % 2 === 0 || n < 20) {{
-      ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(bins[i], x0 + (nm * (barW + 1)) / 2, top + plotH + 14);
-    }}
+  // X-axis ticks
+  ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  for (let x = 0; x <= xMax; x += 50) {{
+    ctx.fillText(x, xPx(x), top + plotH + 14);
   }}
+
+  // Vertical dashed rule at the step cap
+  ctx.strokeStyle = '#999'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(xPx(xMax), top); ctx.lineTo(xPx(xMax), top + plotH); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = MUTED; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText('step cap', xPx(xMax) - 4, top + 10);
+
+  // Step curves
+  for (const m of ALL_MODELS) {{
+    const pts = cdfs[m];
+    ctx.strokeStyle = MODEL_COLORS[m];
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    let prevY = yPx(0);
+    ctx.moveTo(xPx(0), prevY);
+    for (const [x, y] of pts) {{
+      const px = xPx(x);
+      ctx.lineTo(px, prevY);
+      const py = yPx(y);
+      ctx.lineTo(px, py);
+      prevY = py;
+    }}
+    ctx.stroke();
+  }}
+
+  // Medians via linear interpolation across the cdf
+  const medians = {{}};
+  for (const m of ALL_MODELS) {{
+    const pts = cdfs[m];
+    let med = null;
+    for (let i = 1; i < pts.length; i++) {{
+      if (pts[i][1] >= 0.5) {{
+        const [x0, y0] = pts[i - 1];
+        const [x1, y1] = pts[i];
+        med = y1 === y0 ? x1 : x0 + (0.5 - y0) * (x1 - x0) / (y1 - y0);
+        break;
+      }}
+    }}
+    medians[m] = med;
+  }}
+
+  // Median ticks on each curve at y=0.5
+  for (const m of ALL_MODELS) {{
+    if (medians[m] == null) continue;
+    const px = xPx(medians[m]);
+    const py = yPx(0.5);
+    ctx.strokeStyle = MODEL_COLORS[m];
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(px, py - 5); ctx.lineTo(px, py + 5); ctx.stroke();
+  }}
+
+  // Direct labels at right end with median annotation; offset to avoid overlap
+  const labels = ALL_MODELS.map(m => {{
+    const pts = cdfs[m];
+    let yAtEdge = 1;
+    for (let i = pts.length - 1; i >= 0; i--) {{
+      if (pts[i][0] < xMax) {{ yAtEdge = pts[i][1]; break; }}
+    }}
+    return {{ m, y: yAtEdge }};
+  }});
+  labels.sort((a, b) => b.y - a.y);
+  let lastPy = -Infinity;
+  ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+  for (const item of labels) {{
+    let py = yPx(item.y);
+    if (py - lastPy < 14) py = lastPy + 14;
+    lastPy = py;
+    ctx.fillStyle = MODEL_COLORS[item.m];
+    const med = medians[item.m];
+    const text = med != null
+      ? `${{MODEL_NAMES[item.m]}} — median ${{Math.round(med)}}`
+      : MODEL_NAMES[item.m];
+    ctx.fillText(text, left + plotW + 8, py + 3);
+  }}
+
+  // Axis labels
   ctx.fillStyle = MUTED; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('steps per trajectory', w / 2, h - 6);
+  ctx.fillText('steps per trajectory', left + plotW / 2, h - 6);
+  ctx.save();
+  ctx.translate(14, top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('cumulative share of trajectories', 0, 0);
+  ctx.restore();
 }})();
 
 // Color interpolation helper: blend between panel bg and target color
