@@ -479,6 +479,13 @@ def build_analytics_payload(results: Results) -> dict:
     hlf = high_level_frequencies(results)
     bg = bigram_matrix(results)
 
+    # Compute median last code change per model
+    import statistics
+    median_last_edit = {}
+    for model, frs in results.items():
+        vals = [fr.positions["last_edit"] for fr in frs if fr.positions.get("last_edit") is not None]
+        median_last_edit[model] = round(statistics.median(vals)) if vals else None
+
     # Only include models that are in the results
     active_models = [m for m in MODELS if m in results]
 
@@ -503,4 +510,5 @@ def build_analytics_payload(results: Results) -> dict:
         "intent_to_category": dict(INTENT_TO_HIGH_LEVEL),
         "intent_descriptions": INTENT_DESCRIPTIONS,
         "intent_display_names": INTENT_DISPLAY_NAMES,
+        "median_last_edit": median_last_edit,
     }

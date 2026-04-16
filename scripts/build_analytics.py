@@ -334,7 +334,7 @@ def render_html(payload: dict) -> str:
     </div>
     <div class="legend-item">
       <div class="legend-swatch" style="background:var(--claude)"></div>
-      <span>Claude 4.5 Sonnet</span>
+      <span>Sonnet 4.5</span>
     </div>
     <div class="legend-item">
       <div class="legend-swatch" style="background:var(--gemini)"></div>
@@ -371,7 +371,7 @@ def render_html(payload: dict) -> str:
     <canvas id="stackedGpt" height="200"></canvas>
   </div>
   <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5 Sonnet</span></div>
+    <div class="side-label"><span class="model-tag claude">Sonnet 4.5</span></div>
     <canvas id="stackedClaude" height="200"></canvas>
   </div>
   <div class="chart-wrapper">
@@ -390,7 +390,7 @@ def render_html(payload: dict) -> str:
     <div id="heatmapGpt"></div>
   </div>
   <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5 Sonnet</span></div>
+    <div class="side-label"><span class="model-tag claude">Sonnet 4.5</span></div>
     <div id="heatmapClaude"></div>
   </div>
   <div class="chart-wrapper">
@@ -902,12 +902,19 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   }}
 }}
 
-drawStackedArea('stackedGpt', 'gpt5', null,
-  [{{ at: 89, label: 'median last edit (89%)' }}]);
-drawStackedArea('stackedClaude', 'claude45', null,
-  [{{ at: 61, label: 'median last edit (61%)' }}]);
-drawStackedArea('stackedGlm', 'glm45', null, null);
-drawStackedArea('stackedGemini', 'gemini25pro', null, null);
+const canvasMap = {{
+  'gpt5': 'stackedGpt',
+  'claude45': 'stackedClaude',
+  'glm45': 'stackedGlm',
+  'gemini25pro': 'stackedGemini',
+}};
+for (const m of ALL_MODELS) {{
+  const id = canvasMap[m];
+  if (!id) continue;
+  const mle = D.median_last_edit[m];
+  const markers = mle != null ? [{{ at: mle, label: `last code change (${{mle}}%)` }}] : null;
+  drawStackedArea(id, m, null, markers);
+}}
 
 </script>
 </body>
