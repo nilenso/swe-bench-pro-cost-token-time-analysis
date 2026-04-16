@@ -72,7 +72,8 @@ def render_html(results) -> str:
         "<p><strong>submitted (w/ error)</strong>: the agent produced a submission, but the harness also recorded an error condition (timeout, context window overflow, cost limit, format error). The exit_status looks like <code>submitted (exit_command_timeout)</code>. The submission exists and will be evaluated, but the agent didn't finish cleanly.</p>"
         "<p><strong>not submitted</strong>: the agent never ran the submit command. It hit an error (crash, timeout, cost limit) before submitting. No patch was produced.</p>"
         "<p><strong>has submission</strong>: total trajectories where a submission field is present in the .traj file, regardless of how the agent exited. This is the broadest count of 'produced some output'. It includes both clean and error submissions.</p>"
-        "<p>Method: we read the <code>info.exit_status</code> and <code>info.submission</code> fields from each .traj file. A trajectory is 'resolved' if exit_status starts with 'submitted' or if the submission field is non-empty.</p>"))
+        "<p>Note: 'submitted' and 'has submission' do not tell you whether the patch is correct. For that, see the 'resolved' column in Table 1, which comes from the benchmark's evaluation.</p>"
+        "<p>Method: we read the <code>info.exit_status</code> and <code>info.submission</code> fields from each .traj file. 'Submitted (clean)' = exit_status is exactly 'submitted'. 'Submitted (w/ error)' = exit_status starts with 'submitted (' (e.g. 'submitted (exit_command_timeout)').</p>"))
 
     # 0b. Exit status breakdown
     headers = ["exit_status"] + models
@@ -113,8 +114,8 @@ def render_html(results) -> str:
         "<p><strong>n</strong>: number of trajectories (one per SWE-Bench Pro task instance).</p>"
         "<p><strong>total_steps</strong>: sum of all steps across all trajectories for this model.</p>"
         "<p><strong>avg / median / p25 / p75 / min / max</strong>: distribution of steps per trajectory. A 'step' is one action taken by the agent (a command, a file edit, a search, etc.) followed by the environment's observation.</p>"
-        "<p><strong>resolved</strong>: number of trajectories that produced a submission (see Table 0).</p>"
-        "<p><strong>resolve_rate</strong>: resolved / n, as a percentage.</p>"))
+        "<p><strong>resolved</strong>: number of trajectories where the submitted patch actually fixes the failing tests, as determined by the SWE-Bench Pro benchmark evaluation. This comes from <code>data/agent_runs_data.csv</code> (the <code>metadata.resolved</code> field), not from the eval directories on disk. A trajectory can be submitted but not resolved (the patch was wrong), or not submitted and not resolved (the agent never produced a patch).</p>"
+        "<p><strong>resolve_rate</strong>: resolved / n, as a percentage. This is the benchmark's official pass rate.</p>"))
 
     # 2. Base intents
     totals = {}
@@ -279,12 +280,12 @@ def render_html(results) -> str:
         _html_table(headers, tbl_rows),
         "<p>A confusion matrix crossing two signals: whether the agent reached 'work-done' and whether the trajectory produced a submission.</p>"
         "<p><strong>work-done</strong>: the trajectory contains a seq-first-all-pass label, meaning: after the agent's last source code edit, it ran a verify step that passed. This is a signal that the implementation is complete and working.</p>"
-        "<p><strong>resolved</strong>: the trajectory produced a submission (the agent ran the submit command, possibly with an error exit).</p>"
+        "<p><strong>resolved</strong>: the submitted patch actually fixes the failing tests, as judged by the SWE-Bench Pro benchmark evaluation (from <code>agent_runs_data.csv</code>). This is different from 'submitted', which only means the agent produced a patch.</p>"
         "<p><strong>wd+resolved</strong>: the agent's tests passed after its last edit, and it submitted. The best case.</p>"
         "<p><strong>wd+unresolved</strong>: tests passed but the agent didn't submit. It may have continued editing after a passing test, or hit a timeout before submitting.</p>"
         "<p><strong>no_wd+resolved</strong>: the agent submitted without ever reaching a clean test pass after its final edit. It submitted without confirmation that its code works.</p>"
         "<p><strong>no_wd+unresolved</strong>: the agent neither achieved passing tests nor submitted. Complete failure to produce output.</p>"
-        "<p>Method: 'work-done' is computed by finding the last source edit step, then checking if any subsequent verify step has a 'pass' outcome. 'resolved' comes from the .traj metadata.</p>"))
+        "<p>Method: 'work-done' is computed by finding the last source edit step, then checking if any subsequent verify step has a 'pass' outcome. 'resolved' comes from the benchmark CSV (<code>agent_runs_data.csv</code>), which records whether the submitted patch actually fixed the failing tests.</p>"))
 
     # 10. Structural markers
     marker_keys = ["first_edit", "last_edit", "first_verify", "first_verify_pass", "submit"]
