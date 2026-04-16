@@ -27,86 +27,85 @@
 </head>
 <body>
 <h1>Reference Tables</h1>
-<p style="color:#777;font-size:14px;margin-bottom:30px">SWE-Bench Pro trajectory analysis. 4 models, 2920 trajectories.</p>
+<p style="color:#777;font-size:14px;margin-bottom:30px">SWE-Bench Pro trajectory analysis. 4 models, 2459 trajectories.</p>
 <h2>0. Resolution and Submission</h2>
-<table><thead><tr><th>model</th><th>n</th><th>submitted (clean)</th><th>submitted (w/ error)</th><th>not submitted</th><th>has submission</th></tr></thead><tbody><tr><td>claude45</td><td>730</td><td>643</td><td>75</td><td>12</td><td>718</td></tr>
-<tr><td>gemini25pro</td><td>730</td><td>538</td><td>152</td><td>40</td><td>690</td></tr>
-<tr><td>glm45</td><td>730</td><td>595</td><td>118</td><td>17</td><td>713</td></tr>
-<tr><td>gpt5</td><td>730</td><td>438</td><td>185</td><td>107</td><td>623</td></tr>
+<table><thead><tr><th>model</th><th>n</th><th>submitted (clean)</th><th>submitted (w/ error)</th><th>not submitted</th><th>has submission</th></tr></thead><tbody><tr><td>claude45</td><td>730</td><td>643</td><td>75</td><td>12</td><td>392</td></tr>
+<tr><td>gemini25pro</td><td>269</td><td>188</td><td>70</td><td>11</td><td>85</td></tr>
+<tr><td>glm45</td><td>730</td><td>595</td><td>118</td><td>17</td><td>323</td></tr>
+<tr><td>gpt5</td><td>730</td><td>438</td><td>185</td><td>107</td><td>340</td></tr>
 </tbody></table>
 <div class="notes"><p>Each SWE-Bench Pro trajectory ends with an exit status. The agent either submits a patch or doesn't.</p><p><strong>submitted (clean)</strong>: the agent ran its submit command and exited normally. The exit_status field is exactly <code>submitted</code>.</p><p><strong>submitted (w/ error)</strong>: the agent produced a submission, but the harness also recorded an error condition (timeout, context window overflow, cost limit, format error). The exit_status looks like <code>submitted (exit_command_timeout)</code>. The submission exists and will be evaluated, but the agent didn't finish cleanly.</p><p><strong>not submitted</strong>: the agent never ran the submit command. It hit an error (crash, timeout, cost limit) before submitting. No patch was produced.</p><p><strong>has submission</strong>: total trajectories where a submission field is present in the .traj file, regardless of how the agent exited. This is the broadest count of 'produced some output'. It includes both clean and error submissions.</p><p>Method: we read the <code>info.exit_status</code> and <code>info.submission</code> fields from each .traj file. A trajectory is 'resolved' if exit_status starts with 'submitted' or if the submission field is non-empty.</p></div>
 <h2>0b. Exit Status Breakdown</h2>
-<table><thead><tr><th>exit_status</th><th>claude45</th><th>gemini25pro</th><th>glm45</th><th>gpt5</th></tr></thead><tbody><tr><td>submitted</td><td>643</td><td>538</td><td>595</td><td>438</td></tr>
-<tr><td>submitted (exit_command_timeout)</td><td>17</td><td>60</td><td>3</td><td>78</td></tr>
-<tr><td>submitted (exit_error)</td><td>37</td><td>18</td><td>33</td><td>20</td></tr>
-<tr><td>submitted (exit_format)</td><td>2</td><td>39</td><td>53</td><td>5</td></tr>
+<table><thead><tr><th>exit_status</th><th>claude45</th><th>gemini25pro</th><th>glm45</th><th>gpt5</th></tr></thead><tbody><tr><td>submitted</td><td>643</td><td>188</td><td>595</td><td>438</td></tr>
+<tr><td>submitted (exit_command_timeout)</td><td>17</td><td>22</td><td>3</td><td>78</td></tr>
+<tr><td>submitted (exit_error)</td><td>37</td><td>6</td><td>33</td><td>20</td></tr>
 <tr><td>submitted (exit_context)</td><td>2</td><td>0</td><td>29</td><td>63</td></tr>
-<tr><td>exit_error</td><td>9</td><td>22</td><td>6</td><td>53</td></tr>
-<tr><td>submitted (exit_total_execution_time)</td><td>3</td><td>15</td><td>0</td><td>18</td></tr>
-<tr><td>submitted (exit_cost)</td><td>14</td><td>20</td><td>0</td><td>1</td></tr>
-<tr><td>exit_command_timeout</td><td>1</td><td>9</td><td>0</td><td>24</td></tr>
-<tr><td>exit_format</td><td>1</td><td>5</td><td>10</td><td>7</td></tr>
+<tr><td>submitted (exit_format)</td><td>2</td><td>24</td><td>53</td><td>5</td></tr>
+<tr><td>exit_error</td><td>9</td><td>4</td><td>6</td><td>53</td></tr>
+<tr><td>exit_command_timeout</td><td>1</td><td>4</td><td>0</td><td>24</td></tr>
+<tr><td>submitted (exit_total_execution_time)</td><td>3</td><td>8</td><td>0</td><td>18</td></tr>
+<tr><td>submitted (exit_cost)</td><td>14</td><td>10</td><td>0</td><td>1</td></tr>
+<tr><td>exit_format</td><td>1</td><td>3</td><td>10</td><td>7</td></tr>
 <tr><td>exit_total_execution_time</td><td>1</td><td>0</td><td>0</td><td>13</td></tr>
 <tr><td>exit_context</td><td>0</td><td>0</td><td>0</td><td>9</td></tr>
-<tr><td>exit_cost</td><td>0</td><td>3</td><td>0</td><td>0</td></tr>
-<tr><td>None</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
 <tr><td>exit_command</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+<tr><td></td><td>0</td><td>0</td><td>0</td><td>1</td></tr>
 </tbody></table>
 <div class="notes"><p>Every distinct exit_status string from the .traj files, with counts per model.</p><p><strong>submitted</strong>: clean exit after submitting a patch.</p><p><strong>submitted (exit_command_timeout)</strong>: submitted, but a command timed out during the run.</p><p><strong>submitted (exit_context)</strong>: submitted, but hit the context window limit.</p><p><strong>submitted (exit_cost)</strong>: submitted, but hit the cost/token budget limit.</p><p><strong>submitted (exit_format)</strong>: submitted, but the agent produced a malformed action at some point.</p><p><strong>submitted (exit_error)</strong>: submitted, but an internal error occurred.</p><p><strong>submitted (exit_total_execution_time)</strong>: submitted, but hit the total wall-clock time limit.</p><p><strong>exit_error / exit_command_timeout / exit_format / etc.</strong>: the agent hit that condition and never submitted. No patch was produced.</p><p>These statuses are set by the SWE-Agent harness, not by the model itself.</p></div>
 <h2>1. Trajectory Metadata</h2>
-<table><thead><tr><th>model</th><th>n</th><th>total_steps</th><th>avg</th><th>median</th><th>p25</th><th>p75</th><th>min</th><th>max</th><th>resolved</th><th>resolve_rate</th></tr></thead><tbody><tr><td>claude45</td><td>730</td><td>56548</td><td>77.5</td><td>78.0</td><td>63</td><td>89</td><td>2</td><td>215</td><td>718</td><td>98.4%</td></tr>
-<tr><td>gemini25pro</td><td>730</td><td>31719</td><td>43.5</td><td>29.0</td><td>17</td><td>49</td><td>1</td><td>251</td><td>690</td><td>94.5%</td></tr>
-<tr><td>glm45</td><td>730</td><td>39188</td><td>53.7</td><td>52.0</td><td>40</td><td>65</td><td>1</td><td>218</td><td>713</td><td>97.7%</td></tr>
-<tr><td>gpt5</td><td>730</td><td>43404</td><td>59.5</td><td>53.0</td><td>34</td><td>76</td><td>2</td><td>251</td><td>623</td><td>85.3%</td></tr>
+<table><thead><tr><th>model</th><th>n</th><th>total_steps</th><th>avg</th><th>median</th><th>p25</th><th>p75</th><th>min</th><th>max</th><th>resolved</th><th>resolve_rate</th></tr></thead><tbody><tr><td>claude45</td><td>730</td><td>56548</td><td>77.5</td><td>78.0</td><td>63</td><td>89</td><td>2</td><td>215</td><td>392</td><td>53.7%</td></tr>
+<tr><td>gemini25pro</td><td>269</td><td>12263</td><td>45.6</td><td>31</td><td>16</td><td>51</td><td>1</td><td>251</td><td>85</td><td>31.6%</td></tr>
+<tr><td>glm45</td><td>730</td><td>39188</td><td>53.7</td><td>52.0</td><td>40</td><td>65</td><td>1</td><td>218</td><td>323</td><td>44.2%</td></tr>
+<tr><td>gpt5</td><td>730</td><td>43404</td><td>59.5</td><td>53.0</td><td>34</td><td>76</td><td>2</td><td>251</td><td>340</td><td>46.6%</td></tr>
 </tbody></table>
 <div class="notes"><p>Summary statistics for trajectory length (number of action-observation steps per task).</p><p><strong>n</strong>: number of trajectories (one per SWE-Bench Pro task instance).</p><p><strong>total_steps</strong>: sum of all steps across all trajectories for this model.</p><p><strong>avg / median / p25 / p75 / min / max</strong>: distribution of steps per trajectory. A 'step' is one action taken by the agent (a command, a file edit, a search, etc.) followed by the environment's observation.</p><p><strong>resolved</strong>: number of trajectories that produced a submission (see Table 0).</p><p><strong>resolve_rate</strong>: resolved / n, as a percentage.</p></div>
 <h2>2. Base Intent Frequencies</h2>
-<table><thead><tr><th>intent</th><th>claude45_n</th><th>claude45_%</th><th>gemini25pro_n</th><th>gemini25pro_%</th><th>glm45_n</th><th>glm45_%</th><th>gpt5_n</th><th>gpt5_%</th></tr></thead><tbody><tr><td>edit-source</td><td>5217</td><td>9.2%</td><td>10279</td><td>32.4%</td><td>7268</td><td>18.5%</td><td>4983</td><td>11.5%</td></tr>
-<tr><td>read-file-range</td><td>5974</td><td>10.6%</td><td>1616</td><td>5.1%</td><td>6377</td><td>16.3%</td><td>5997</td><td>13.8%</td></tr>
-<tr><td>search-keyword</td><td>7002</td><td>12.4%</td><td>905</td><td>2.9%</td><td>2804</td><td>7.2%</td><td>6499</td><td>15.0%</td></tr>
-<tr><td>read-file-full</td><td>3125</td><td>5.5%</td><td>3943</td><td>12.4%</td><td>3041</td><td>7.8%</td><td>5020</td><td>11.6%</td></tr>
-<tr><td>run-test-suite</td><td>5942</td><td>10.5%</td><td>789</td><td>2.5%</td><td>1064</td><td>2.7%</td><td>585</td><td>1.3%</td></tr>
-<tr><td>run-verify-script</td><td>3420</td><td>6.0%</td><td>208</td><td>0.7%</td><td>3011</td><td>7.7%</td><td>113</td><td>0.3%</td></tr>
-<tr><td>view-directory</td><td>1137</td><td>2.0%</td><td>12</td><td>0.0%</td><td>2488</td><td>6.3%</td><td>2133</td><td>4.9%</td></tr>
-<tr><td>read-via-bash</td><td>2345</td><td>4.1%</td><td>140</td><td>0.4%</td><td>133</td><td>0.3%</td><td>2974</td><td>6.9%</td></tr>
-<tr><td>create-test-script</td><td>2633</td><td>4.7%</td><td>121</td><td>0.4%</td><td>1913</td><td>4.9%</td><td>18</td><td>0.0%</td></tr>
-<tr><td>edit-test-or-repro</td><td>712</td><td>1.3%</td><td>1140</td><td>3.6%</td><td>2337</td><td>6.0%</td><td>243</td><td>0.6%</td></tr>
-<tr><td>run-repro-script</td><td>375</td><td>0.7%</td><td>1755</td><td>5.5%</td><td>1082</td><td>2.8%</td><td>1067</td><td>2.5%</td></tr>
-<tr><td>search-files-by-content</td><td>3254</td><td>5.8%</td><td>32</td><td>0.1%</td><td>851</td><td>2.2%</td><td>10</td><td>0.0%</td></tr>
-<tr><td>empty</td><td>770</td><td>1.4%</td><td>906</td><td>2.9%</td><td>964</td><td>2.5%</td><td>854</td><td>2.0%</td></tr>
-<tr><td>submit</td><td>656</td><td>1.2%</td><td>1239</td><td>3.9%</td><td>595</td><td>1.5%</td><td>537</td><td>1.2%</td></tr>
-<tr><td>list-directory</td><td>843</td><td>1.5%</td><td>1378</td><td>4.3%</td><td>86</td><td>0.2%</td><td>708</td><td>1.6%</td></tr>
-<tr><td>bash-other</td><td>928</td><td>1.6%</td><td>843</td><td>2.7%</td><td>458</td><td>1.2%</td><td>631</td><td>1.5%</td></tr>
-<tr><td>insert-source</td><td>12</td><td>0.0%</td><td>2007</td><td>6.3%</td><td>16</td><td>0.0%</td><td>803</td><td>1.9%</td></tr>
-<tr><td>search-keyword(failed)</td><td>46</td><td>0.1%</td><td>8</td><td>0.0%</td><td>33</td><td>0.1%</td><td>2748</td><td>6.3%</td></tr>
-<tr><td>file-cleanup</td><td>1554</td><td>2.7%</td><td>588</td><td>1.9%</td><td>426</td><td>1.1%</td><td>17</td><td>0.0%</td></tr>
-<tr><td>search-files-by-name</td><td>1792</td><td>3.2%</td><td>310</td><td>1.0%</td><td>266</td><td>0.7%</td><td>49</td><td>0.1%</td></tr>
-<tr><td>create-file</td><td>595</td><td>1.1%</td><td>686</td><td>2.2%</td><td>575</td><td>1.5%</td><td>326</td><td>0.8%</td></tr>
-<tr><td>compile-build</td><td>1088</td><td>1.9%</td><td>150</td><td>0.5%</td><td>754</td><td>1.9%</td><td>41</td><td>0.1%</td></tr>
+<table><thead><tr><th>intent</th><th>claude45_n</th><th>claude45_%</th><th>gemini25pro_n</th><th>gemini25pro_%</th><th>glm45_n</th><th>glm45_%</th><th>gpt5_n</th><th>gpt5_%</th></tr></thead><tbody><tr><td>edit-source</td><td>5217</td><td>9.2%</td><td>3558</td><td>29.0%</td><td>7268</td><td>18.5%</td><td>4983</td><td>11.5%</td></tr>
+<tr><td>read-file-range</td><td>5974</td><td>10.6%</td><td>720</td><td>5.9%</td><td>6377</td><td>16.3%</td><td>5997</td><td>13.8%</td></tr>
+<tr><td>search-keyword</td><td>7002</td><td>12.4%</td><td>263</td><td>2.1%</td><td>2804</td><td>7.2%</td><td>6499</td><td>15.0%</td></tr>
+<tr><td>read-file-full</td><td>3125</td><td>5.5%</td><td>1356</td><td>11.1%</td><td>3041</td><td>7.8%</td><td>5020</td><td>11.6%</td></tr>
+<tr><td>run-test-suite</td><td>5942</td><td>10.5%</td><td>193</td><td>1.6%</td><td>1064</td><td>2.7%</td><td>585</td><td>1.3%</td></tr>
+<tr><td>run-verify-script</td><td>3420</td><td>6.0%</td><td>69</td><td>0.6%</td><td>3011</td><td>7.7%</td><td>113</td><td>0.3%</td></tr>
+<tr><td>view-directory</td><td>1137</td><td>2.0%</td><td>5</td><td>0.0%</td><td>2488</td><td>6.3%</td><td>2133</td><td>4.9%</td></tr>
+<tr><td>read-via-bash</td><td>2345</td><td>4.1%</td><td>55</td><td>0.4%</td><td>133</td><td>0.3%</td><td>2974</td><td>6.9%</td></tr>
+<tr><td>create-test-script</td><td>2633</td><td>4.7%</td><td>40</td><td>0.3%</td><td>1913</td><td>4.9%</td><td>18</td><td>0.0%</td></tr>
+<tr><td>search-files-by-content</td><td>3254</td><td>5.8%</td><td>15</td><td>0.1%</td><td>851</td><td>2.2%</td><td>10</td><td>0.0%</td></tr>
+<tr><td>edit-test-or-repro</td><td>712</td><td>1.3%</td><td>455</td><td>3.7%</td><td>2337</td><td>6.0%</td><td>243</td><td>0.6%</td></tr>
+<tr><td>run-repro-script</td><td>375</td><td>0.7%</td><td>914</td><td>7.5%</td><td>1082</td><td>2.8%</td><td>1067</td><td>2.5%</td></tr>
+<tr><td>empty</td><td>770</td><td>1.4%</td><td>402</td><td>3.3%</td><td>964</td><td>2.5%</td><td>854</td><td>2.0%</td></tr>
+<tr><td>search-keyword(failed)</td><td>46</td><td>0.1%</td><td>3</td><td>0.0%</td><td>33</td><td>0.1%</td><td>2748</td><td>6.3%</td></tr>
+<tr><td>submit</td><td>656</td><td>1.2%</td><td>640</td><td>5.2%</td><td>595</td><td>1.5%</td><td>537</td><td>1.2%</td></tr>
+<tr><td>bash-other</td><td>928</td><td>1.6%</td><td>319</td><td>2.6%</td><td>458</td><td>1.2%</td><td>631</td><td>1.5%</td></tr>
+<tr><td>list-directory</td><td>843</td><td>1.5%</td><td>616</td><td>5.0%</td><td>86</td><td>0.2%</td><td>708</td><td>1.6%</td></tr>
+<tr><td>search-files-by-name</td><td>1792</td><td>3.2%</td><td>109</td><td>0.9%</td><td>266</td><td>0.7%</td><td>49</td><td>0.1%</td></tr>
+<tr><td>file-cleanup</td><td>1554</td><td>2.7%</td><td>162</td><td>1.3%</td><td>426</td><td>1.1%</td><td>17</td><td>0.0%</td></tr>
+<tr><td>compile-build</td><td>1088</td><td>1.9%</td><td>99</td><td>0.8%</td><td>754</td><td>1.9%</td><td>41</td><td>0.1%</td></tr>
 <tr><td>run-inline-verify</td><td>999</td><td>1.8%</td><td>1</td><td>0.0%</td><td>206</td><td>0.5%</td><td>696</td><td>1.6%</td></tr>
+<tr><td>create-file</td><td>595</td><td>1.1%</td><td>263</td><td>2.1%</td><td>575</td><td>1.5%</td><td>326</td><td>0.8%</td></tr>
+<tr><td>insert-source</td><td>12</td><td>0.0%</td><td>835</td><td>6.8%</td><td>16</td><td>0.0%</td><td>803</td><td>1.9%</td></tr>
 <tr><td>run-test-specific</td><td>1105</td><td>2.0%</td><td>0</td><td>0.0%</td><td>168</td><td>0.4%</td><td>370</td><td>0.9%</td></tr>
-<tr><td>read-test-file</td><td>644</td><td>1.1%</td><td>56</td><td>0.2%</td><td>259</td><td>0.7%</td><td>635</td><td>1.5%</td></tr>
-<tr><td>bash-command(failed)</td><td>32</td><td>0.1%</td><td>264</td><td>0.8%</td><td>33</td><td>0.1%</td><td>1217</td><td>2.8%</td></tr>
-<tr><td>create-repro-script</td><td>157</td><td>0.3%</td><td>551</td><td>1.7%</td><td>372</td><td>0.9%</td><td>463</td><td>1.1%</td></tr>
-<tr><td>run-custom-script</td><td>476</td><td>0.8%</td><td>115</td><td>0.4%</td><td>659</td><td>1.7%</td><td>111</td><td>0.3%</td></tr>
-<tr><td>read-via-bash(failed)</td><td>23</td><td>0.0%</td><td>36</td><td>0.1%</td><td>2</td><td>0.0%</td><td>994</td><td>2.3%</td></tr>
-<tr><td>run-script(failed)</td><td>47</td><td>0.1%</td><td>155</td><td>0.5%</td><td>90</td><td>0.2%</td><td>759</td><td>1.7%</td></tr>
-<tr><td>read-file-full(truncated)</td><td>198</td><td>0.4%</td><td>361</td><td>1.1%</td><td>229</td><td>0.6%</td><td>245</td><td>0.6%</td></tr>
-<tr><td>run-inline-snippet</td><td>472</td><td>0.8%</td><td>92</td><td>0.3%</td><td>146</td><td>0.4%</td><td>193</td><td>0.4%</td></tr>
+<tr><td>read-test-file</td><td>644</td><td>1.1%</td><td>6</td><td>0.0%</td><td>259</td><td>0.7%</td><td>635</td><td>1.5%</td></tr>
+<tr><td>bash-command(failed)</td><td>32</td><td>0.1%</td><td>120</td><td>1.0%</td><td>33</td><td>0.1%</td><td>1217</td><td>2.8%</td></tr>
+<tr><td>run-custom-script</td><td>476</td><td>0.8%</td><td>50</td><td>0.4%</td><td>659</td><td>1.7%</td><td>111</td><td>0.3%</td></tr>
+<tr><td>create-repro-script</td><td>157</td><td>0.3%</td><td>209</td><td>1.7%</td><td>372</td><td>0.9%</td><td>463</td><td>1.1%</td></tr>
+<tr><td>read-via-bash(failed)</td><td>23</td><td>0.0%</td><td>21</td><td>0.2%</td><td>2</td><td>0.0%</td><td>994</td><td>2.3%</td></tr>
+<tr><td>run-script(failed)</td><td>47</td><td>0.1%</td><td>70</td><td>0.6%</td><td>90</td><td>0.2%</td><td>759</td><td>1.7%</td></tr>
+<tr><td>run-inline-snippet</td><td>472</td><td>0.8%</td><td>63</td><td>0.5%</td><td>146</td><td>0.4%</td><td>193</td><td>0.4%</td></tr>
+<tr><td>read-file-full(truncated)</td><td>198</td><td>0.4%</td><td>163</td><td>1.3%</td><td>229</td><td>0.6%</td><td>245</td><td>0.6%</td></tr>
 <tr><td>create-documentation</td><td>661</td><td>1.2%</td><td>1</td><td>0.0%</td><td>71</td><td>0.2%</td><td>2</td><td>0.0%</td></tr>
-<tr><td>undo-edit</td><td>4</td><td>0.0%</td><td>662</td><td>2.1%</td><td>3</td><td>0.0%</td><td>39</td><td>0.1%</td></tr>
-<tr><td>git-status-log</td><td>652</td><td>1.2%</td><td>4</td><td>0.0%</td><td>13</td><td>0.0%</td><td>23</td><td>0.1%</td></tr>
+<tr><td>git-status-log</td><td>652</td><td>1.2%</td><td>0</td><td>0.0%</td><td>13</td><td>0.0%</td><td>23</td><td>0.1%</td></tr>
 <tr><td>git-diff</td><td>538</td><td>1.0%</td><td>0</td><td>0.0%</td><td>9</td><td>0.0%</td><td>23</td><td>0.1%</td></tr>
-<tr><td>create-verify-script</td><td>321</td><td>0.6%</td><td>11</td><td>0.0%</td><td>94</td><td>0.2%</td><td>47</td><td>0.1%</td></tr>
-<tr><td>read-via-inline-script</td><td>76</td><td>0.1%</td><td>3</td><td>0.0%</td><td>21</td><td>0.1%</td><td>373</td><td>0.9%</td></tr>
-<tr><td>read-config-file</td><td>26</td><td>0.0%</td><td>48</td><td>0.2%</td><td>72</td><td>0.2%</td><td>206</td><td>0.5%</td></tr>
+<tr><td>read-via-inline-script</td><td>76</td><td>0.1%</td><td>0</td><td>0.0%</td><td>21</td><td>0.1%</td><td>373</td><td>0.9%</td></tr>
+<tr><td>create-verify-script</td><td>321</td><td>0.6%</td><td>5</td><td>0.0%</td><td>94</td><td>0.2%</td><td>47</td><td>0.1%</td></tr>
+<tr><td>undo-edit</td><td>4</td><td>0.0%</td><td>293</td><td>2.4%</td><td>3</td><td>0.0%</td><td>39</td><td>0.1%</td></tr>
+<tr><td>read-config-file</td><td>26</td><td>0.0%</td><td>19</td><td>0.2%</td><td>72</td><td>0.2%</td><td>206</td><td>0.5%</td></tr>
 <tr><td>inspect-file-metadata</td><td>246</td><td>0.4%</td><td>1</td><td>0.0%</td><td>14</td><td>0.0%</td><td>22</td><td>0.1%</td></tr>
-<tr><td>run-test-suite(failed)</td><td>6</td><td>0.0%</td><td>94</td><td>0.3%</td><td>3</td><td>0.0%</td><td>155</td><td>0.4%</td></tr>
 <tr><td>syntax-check</td><td>183</td><td>0.3%</td><td>0</td><td>0.0%</td><td>57</td><td>0.1%</td><td>18</td><td>0.0%</td></tr>
-<tr><td>echo</td><td>140</td><td>0.2%</td><td>9</td><td>0.0%</td><td>33</td><td>0.1%</td><td>69</td><td>0.2%</td></tr>
 <tr><td>edit-via-inline-script</td><td>5</td><td>0.0%</td><td>0</td><td>0.0%</td><td>1</td><td>0.0%</td><td>245</td><td>0.6%</td></tr>
-<tr><td>install-deps</td><td>20</td><td>0.0%</td><td>129</td><td>0.4%</td><td>37</td><td>0.1%</td><td>0</td><td>0.0%</td></tr>
-<tr><td>start-service</td><td>26</td><td>0.0%</td><td>71</td><td>0.2%</td><td>42</td><td>0.1%</td><td>4</td><td>0.0%</td></tr>
+<tr><td>echo</td><td>140</td><td>0.2%</td><td>4</td><td>0.0%</td><td>33</td><td>0.1%</td><td>69</td><td>0.2%</td></tr>
+<tr><td>run-test-suite(failed)</td><td>6</td><td>0.0%</td><td>28</td><td>0.2%</td><td>3</td><td>0.0%</td><td>155</td><td>0.4%</td></tr>
+<tr><td>install-deps</td><td>20</td><td>0.0%</td><td>75</td><td>0.6%</td><td>37</td><td>0.1%</td><td>0</td><td>0.0%</td></tr>
+<tr><td>start-service</td><td>26</td><td>0.0%</td><td>43</td><td>0.4%</td><td>42</td><td>0.1%</td><td>4</td><td>0.0%</td></tr>
 <tr><td>apply-patch</td><td>0</td><td>0.0%</td><td>0</td><td>0.0%</td><td>0</td><td>0.0%</td><td>94</td><td>0.2%</td></tr>
 <tr><td>create-file-via-inline-script</td><td>21</td><td>0.0%</td><td>0</td><td>0.0%</td><td>0</td><td>0.0%</td><td>41</td><td>0.1%</td></tr>
 <tr><td>git-stash</td><td>28</td><td>0.0%</td><td>0</td><td>0.0%</td><td>2</td><td>0.0%</td><td>0</td><td>0.0%</td></tr>
@@ -115,87 +114,87 @@
 </tbody></table>
 <div class="notes"><p>Every trajectory step is classified into one of ~50 base intents using deterministic rules (regex matching on the action string, file names, and observation text). No LLM is used for classification.</p><p><strong>_n</strong>: total count of that intent across all trajectories for the model.</p><p><strong>_%</strong>: that count as a percentage of all steps for the model. Percentages sum to 100% within each model.</p><p>Sorted by total count across all models (most frequent first).</p><p>Method: each step's action string is pattern-matched against a priority-ordered ruleset in classify_intent.py. For example, an action starting with <code>str_replace_editor view</code> is classified as a read intent, while <code>grep</code> or <code>rg</code> becomes search-keyword.</p></div>
 <h2>3. High-Level Category Frequencies</h2>
-<table><thead><tr><th>category</th><th>claude45_n</th><th>claude45_%</th><th>claude45_per_traj</th><th>gemini25pro_n</th><th>gemini25pro_%</th><th>gemini25pro_per_traj</th><th>glm45_n</th><th>glm45_%</th><th>glm45_per_traj</th><th>gpt5_n</th><th>gpt5_%</th><th>gpt5_per_traj</th></tr></thead><tbody><tr><td>read</td><td>12388</td><td>21.9%</td><td>17.0</td><td>6167</td><td>19.4%</td><td>8.4</td><td>10132</td><td>25.9%</td><td>13.9</td><td>15450</td><td>35.6%</td><td>21.2</td></tr>
-<tr><td>search</td><td>14280</td><td>25.3%</td><td>19.6</td><td>2638</td><td>8.3%</td><td>3.6</td><td>6509</td><td>16.6%</td><td>8.9</td><td>9423</td><td>21.7%</td><td>12.9</td></tr>
-<tr><td>reproduce</td><td>1004</td><td>1.8%</td><td>1.4</td><td>2398</td><td>7.6%</td><td>3.3</td><td>1600</td><td>4.1%</td><td>2.2</td><td>1723</td><td>4.0%</td><td>2.4</td></tr>
-<tr><td>edit</td><td>5850</td><td>10.3%</td><td>8.0</td><td>12972</td><td>40.9%</td><td>17.8</td><td>7860</td><td>20.1%</td><td>10.8</td><td>6492</td><td>15.0%</td><td>8.9</td></tr>
-<tr><td>verify</td><td>16879</td><td>29.8%</td><td>23.1</td><td>2535</td><td>8.0%</td><td>3.5</td><td>10263</td><td>26.2%</td><td>14.1</td><td>2242</td><td>5.2%</td><td>3.1</td></tr>
-<tr><td>git</td><td>1218</td><td>2.2%</td><td>1.7</td><td>4</td><td>0.0%</td><td>0.0</td><td>24</td><td>0.1%</td><td>0.0</td><td>46</td><td>0.1%</td><td>0.1</td></tr>
-<tr><td>housekeeping</td><td>2277</td><td>4.0%</td><td>3.1</td><td>789</td><td>2.5%</td><td>1.1</td><td>586</td><td>1.5%</td><td>0.8</td><td>25</td><td>0.1%</td><td>0.0</td></tr>
-<tr><td>failed</td><td>154</td><td>0.3%</td><td>0.2</td><td>557</td><td>1.8%</td><td>0.8</td><td>161</td><td>0.4%</td><td>0.2</td><td>5873</td><td>13.5%</td><td>8.0</td></tr>
-<tr><td>other</td><td>2498</td><td>4.4%</td><td>3.4</td><td>3659</td><td>11.5%</td><td>5.0</td><td>2053</td><td>5.2%</td><td>2.8</td><td>2130</td><td>4.9%</td><td>2.9</td></tr>
+<table><thead><tr><th>category</th><th>claude45_n</th><th>claude45_%</th><th>claude45_per_traj</th><th>gemini25pro_n</th><th>gemini25pro_%</th><th>gemini25pro_per_traj</th><th>glm45_n</th><th>glm45_%</th><th>glm45_per_traj</th><th>gpt5_n</th><th>gpt5_%</th><th>gpt5_per_traj</th></tr></thead><tbody><tr><td>read</td><td>12388</td><td>21.9%</td><td>17.0</td><td>2319</td><td>18.9%</td><td>8.6</td><td>10132</td><td>25.9%</td><td>13.9</td><td>15450</td><td>35.6%</td><td>21.2</td></tr>
+<tr><td>search</td><td>14280</td><td>25.3%</td><td>19.6</td><td>1009</td><td>8.2%</td><td>3.8</td><td>6509</td><td>16.6%</td><td>8.9</td><td>9423</td><td>21.7%</td><td>12.9</td></tr>
+<tr><td>reproduce</td><td>1004</td><td>1.8%</td><td>1.4</td><td>1186</td><td>9.7%</td><td>4.4</td><td>1600</td><td>4.1%</td><td>2.2</td><td>1723</td><td>4.0%</td><td>2.4</td></tr>
+<tr><td>edit</td><td>5850</td><td>10.3%</td><td>8.0</td><td>4656</td><td>38.0%</td><td>17.3</td><td>7860</td><td>20.1%</td><td>10.8</td><td>6492</td><td>15.0%</td><td>8.9</td></tr>
+<tr><td>verify</td><td>16879</td><td>29.8%</td><td>23.1</td><td>912</td><td>7.4%</td><td>3.4</td><td>10263</td><td>26.2%</td><td>14.1</td><td>2242</td><td>5.2%</td><td>3.1</td></tr>
+<tr><td>git</td><td>1218</td><td>2.2%</td><td>1.7</td><td>0</td><td>0.0%</td><td>0.0</td><td>24</td><td>0.1%</td><td>0.0</td><td>46</td><td>0.1%</td><td>0.1</td></tr>
+<tr><td>housekeeping</td><td>2277</td><td>4.0%</td><td>3.1</td><td>281</td><td>2.3%</td><td>1.0</td><td>586</td><td>1.5%</td><td>0.8</td><td>25</td><td>0.1%</td><td>0.0</td></tr>
+<tr><td>failed</td><td>154</td><td>0.3%</td><td>0.2</td><td>242</td><td>2.0%</td><td>0.9</td><td>161</td><td>0.4%</td><td>0.2</td><td>5873</td><td>13.5%</td><td>8.0</td></tr>
+<tr><td>other</td><td>2498</td><td>4.4%</td><td>3.4</td><td>1658</td><td>13.5%</td><td>6.2</td><td>2053</td><td>5.2%</td><td>2.8</td><td>2130</td><td>4.9%</td><td>2.9</td></tr>
 </tbody></table>
 <div class="notes"><p>Each base intent maps to one of 9 high-level categories: read, search, reproduce, edit, verify, git, housekeeping, failed, other.</p><p><strong>_n</strong>: total steps in that category.</p><p><strong>_%</strong>: percentage of all steps.</p><p><strong>_per_traj</strong>: average number of steps in that category per trajectory (total category steps / number of trajectories).</p><p>The mapping from base intent to category is defined in classify_intent.py (INTENT_TO_HIGH_LEVEL). For example, read-file-full, read-file-range, and read-via-bash all map to 'read'.</p></div>
 <h2>4. Phase Groupings</h2>
-<table><thead><tr><th>phase</th><th>claude45_%</th><th>gemini25pro_%</th><th>glm45_%</th><th>gpt5_%</th></tr></thead><tbody><tr><td>understand</td><td>47.2%</td><td>27.8%</td><td>42.5%</td><td>57.3%</td></tr>
-<tr><td>reproduce</td><td>1.8%</td><td>7.6%</td><td>4.1%</td><td>4.0%</td></tr>
-<tr><td>edit</td><td>10.3%</td><td>40.9%</td><td>20.1%</td><td>15.0%</td></tr>
-<tr><td>verify</td><td>29.8%</td><td>8.0%</td><td>26.2%</td><td>5.2%</td></tr>
-<tr><td>cleanup</td><td>6.2%</td><td>2.5%</td><td>1.6%</td><td>0.2%</td></tr>
+<table><thead><tr><th>phase</th><th>claude45_%</th><th>gemini25pro_%</th><th>glm45_%</th><th>gpt5_%</th></tr></thead><tbody><tr><td>understand</td><td>47.2%</td><td>27.1%</td><td>42.5%</td><td>57.3%</td></tr>
+<tr><td>reproduce</td><td>1.8%</td><td>9.7%</td><td>4.1%</td><td>4.0%</td></tr>
+<tr><td>edit</td><td>10.3%</td><td>38.0%</td><td>20.1%</td><td>15.0%</td></tr>
+<tr><td>verify</td><td>29.8%</td><td>7.4%</td><td>26.2%</td><td>5.2%</td></tr>
+<tr><td>cleanup</td><td>6.2%</td><td>2.3%</td><td>1.6%</td><td>0.2%</td></tr>
 </tbody></table>
 <div class="notes"><p>The 9 high-level categories are further grouped into 5 phases that represent the broad arc of a trajectory:</p><p><strong>understand</strong> = read + search. The agent is reading code and searching for information.</p><p><strong>reproduce</strong> = reproduce. The agent is writing or running reproduction scripts to confirm the bug.</p><p><strong>edit</strong> = edit. The agent is making source code changes.</p><p><strong>verify</strong> = verify. The agent is running tests, compiling, or checking its work.</p><p><strong>cleanup</strong> = git + housekeeping. The agent is reviewing changes (git diff/log) or cleaning up (rm, mv, writing docs).</p><p>These phases are used in the stacked area charts (Typical Trajectory Shape) to show how the mix of actions evolves from start to end.</p></div>
 <h2>5. Verify Sub-Intent Breakdown</h2>
-<table><thead><tr><th>intent</th><th>claude45_n</th><th>gemini25pro_n</th><th>glm45_n</th><th>gpt5_n</th></tr></thead><tbody><tr><td>run-test-suite</td><td>5942</td><td>789</td><td>1064</td><td>585</td></tr>
-<tr><td>run-verify-script</td><td>3420</td><td>208</td><td>3011</td><td>113</td></tr>
-<tr><td>create-test-script</td><td>2633</td><td>121</td><td>1913</td><td>18</td></tr>
-<tr><td>edit-test-or-repro</td><td>712</td><td>1140</td><td>2337</td><td>243</td></tr>
-<tr><td>compile-build</td><td>1088</td><td>150</td><td>754</td><td>41</td></tr>
+<table><thead><tr><th>intent</th><th>claude45_n</th><th>gemini25pro_n</th><th>glm45_n</th><th>gpt5_n</th></tr></thead><tbody><tr><td>run-test-suite</td><td>5942</td><td>193</td><td>1064</td><td>585</td></tr>
+<tr><td>run-verify-script</td><td>3420</td><td>69</td><td>3011</td><td>113</td></tr>
+<tr><td>create-test-script</td><td>2633</td><td>40</td><td>1913</td><td>18</td></tr>
+<tr><td>edit-test-or-repro</td><td>712</td><td>455</td><td>2337</td><td>243</td></tr>
+<tr><td>compile-build</td><td>1088</td><td>99</td><td>754</td><td>41</td></tr>
 <tr><td>run-inline-verify</td><td>999</td><td>1</td><td>206</td><td>696</td></tr>
 <tr><td>run-test-specific</td><td>1105</td><td>0</td><td>168</td><td>370</td></tr>
-<tr><td>run-custom-script</td><td>476</td><td>115</td><td>659</td><td>111</td></tr>
-<tr><td>create-verify-script</td><td>321</td><td>11</td><td>94</td><td>47</td></tr>
+<tr><td>run-custom-script</td><td>476</td><td>50</td><td>659</td><td>111</td></tr>
+<tr><td>create-verify-script</td><td>321</td><td>5</td><td>94</td><td>47</td></tr>
 <tr><td>syntax-check</td><td>183</td><td>0</td><td>57</td><td>18</td></tr>
 </tbody></table>
 <div class="notes"><p>The 'verify' category contains ~10 sub-intents. This table shows where each model's verification volume comes from.</p><p><strong>run-test-suite</strong>: broad test runs (pytest, go test, npm test, mocha) without targeting specific tests.</p><p><strong>run-test-specific</strong>: targeted test runs using pytest -k or :: to run specific test functions.</p><p><strong>run-verify-script</strong>: running a script named verify*, check*, validate*, or edge_case*.</p><p><strong>create-test-script</strong>: creating a new test file (test_*, *test.py, etc.).</p><p><strong>run-inline-verify</strong>: an inline python -c / node -e snippet that imports project code or runs assertions. Classified as verify (not reproduce) because the snippet structure indicates it's checking correctness, not reproducing a bug.</p><p><strong>compile-build</strong>: go build, go vet, make, npx tsc. Compilation as a verification step.</p><p><strong>edit-test-or-repro</strong>: editing an existing test or repro file (str_replace on test_* or repro* files).</p><p><strong>run-custom-script</strong>: running a named script that doesn't match repro/test/verify naming patterns.</p><p><strong>create-verify-script</strong>: creating a new file named verify*, check*, validate*.</p><p><strong>syntax-check</strong>: py_compile, compileall, node -c. Quick syntax validation.</p></div>
 <h2>7. Verify Outcomes</h2>
 <table><thead><tr><th>model</th><th>pass</th><th>fail</th><th>unknown</th><th>total</th><th>pass_rate</th></tr></thead><tbody><tr><td>claude45</td><td>5276</td><td>1323</td><td>49949</td><td>56548</td><td>80.0%</td></tr>
-<tr><td>gemini25pro</td><td>130</td><td>736</td><td>30853</td><td>31719</td><td>15.0%</td></tr>
+<tr><td>gemini25pro</td><td>75</td><td>131</td><td>12057</td><td>12263</td><td>36.4%</td></tr>
 <tr><td>glm45</td><td>1068</td><td>767</td><td>37353</td><td>39188</td><td>58.2%</td></tr>
 <tr><td>gpt5</td><td>338</td><td>445</td><td>42621</td><td>43404</td><td>43.2%</td></tr>
 </tbody></table>
 <div class="notes"><p>For each verify-type step (run-test-suite, run-test-specific, run-verify-script, compile-build, etc.), we attempt to determine whether the test/build passed or failed by inspecting the observation text.</p><p><strong>pass</strong>: the observation contains a recognizable pass pattern (e.g., pytest's 'X passed', a clean exit code, 'Tests passed').</p><p><strong>fail</strong>: the observation contains a recognizable failure (traceback, non-zero exit code, 'FAILED', assertion error).</p><p><strong>unknown</strong>: the observation didn't match any pass or fail pattern. This happens when the output is ambiguous, truncated, or uses a test framework we don't recognize.</p><p><strong>pass_rate</strong>: pass / (pass + fail), excluding unknowns. This tells you: of the verify steps where we could determine the outcome, what fraction passed?</p><p>Method: classify_verify_outcome() in classify_intent.py pattern-matches the observation text against pytest summary lines, Go test output, Node.js errors, tracebacks, and exit codes.</p></div>
 <h2>8. Sequence Labels</h2>
-<table><thead><tr><th>label</th><th>claude45_n</th><th>gemini25pro_n</th><th>glm45_n</th><th>gpt5_n</th></tr></thead><tbody><tr><td>seq-verify-rerun-no-edit</td><td>9688</td><td>215</td><td>2516</td><td>626</td></tr>
-<tr><td>seq-reread-edited-file</td><td>2751</td><td>2442</td><td>2566</td><td>2233</td></tr>
-<tr><td>seq-verify-after-edit</td><td>2011</td><td>892</td><td>2683</td><td>826</td></tr>
-<tr><td>seq-repro-after-edit</td><td>448</td><td>1205</td><td>789</td><td>923</td></tr>
-<tr><td>seq-submit-after-verify</td><td>656</td><td>667</td><td>586</td><td>379</td></tr>
-<tr><td>seq-work-done</td><td>592</td><td>37</td><td>298</td><td>82</td></tr>
-<tr><td>seq-repro-rerun-same-command</td><td>215</td><td>391</td><td>40</td><td>273</td></tr>
-<tr><td>seq-verify-rerun-same-command</td><td>291</td><td>84</td><td>176</td><td>258</td></tr>
-<tr><td>seq-repro-rerun-no-edit</td><td>109</td><td>95</td><td>106</td><td>292</td></tr>
-<tr><td>seq-diagnose-read-after-failed-verify</td><td>16</td><td>44</td><td>26</td><td>192</td></tr>
-<tr><td>seq-edit-after-failed-verify</td><td>4</td><td>89</td><td>32</td><td>96</td></tr>
+<table><thead><tr><th>label</th><th>claude45_n</th><th>gemini25pro_n</th><th>glm45_n</th><th>gpt5_n</th></tr></thead><tbody><tr><td>seq-verify-rerun-no-edit</td><td>9688</td><td>53</td><td>2516</td><td>626</td></tr>
+<tr><td>seq-reread-edited-file</td><td>2751</td><td>896</td><td>2566</td><td>2233</td></tr>
+<tr><td>seq-verify-after-edit</td><td>2011</td><td>298</td><td>2683</td><td>826</td></tr>
+<tr><td>seq-repro-after-edit</td><td>448</td><td>544</td><td>789</td><td>923</td></tr>
+<tr><td>seq-submit-after-verify</td><td>656</td><td>436</td><td>586</td><td>379</td></tr>
+<tr><td>seq-work-done</td><td>592</td><td>12</td><td>298</td><td>82</td></tr>
+<tr><td>seq-repro-rerun-same-command</td><td>215</td><td>311</td><td>40</td><td>273</td></tr>
+<tr><td>seq-verify-rerun-same-command</td><td>291</td><td>39</td><td>176</td><td>258</td></tr>
+<tr><td>seq-repro-rerun-no-edit</td><td>109</td><td>66</td><td>106</td><td>292</td></tr>
+<tr><td>seq-diagnose-read-after-failed-verify</td><td>16</td><td>5</td><td>26</td><td>192</td></tr>
 <tr><td>seq-diagnose-search-after-failed-verify</td><td>4</td><td>0</td><td>3</td><td>136</td></tr>
+<tr><td>seq-edit-after-failed-verify</td><td>4</td><td>10</td><td>32</td><td>96</td></tr>
 </tbody></table>
 <div class="notes"><p>Sequence labels are a second-pass classification that looks at the context around each step (what came before it, whether an edit happened since the last verify, etc.).</p><p><strong>seq-verify-after-edit</strong>: a verify step that occurs after a source edit. This is the core edit-then-test loop.</p><p><strong>seq-verify-rerun-no-edit</strong>: a verify step where no edit happened since the last verify, but it's a different command. The agent is trying a different test or check.</p><p><strong>seq-verify-rerun-same-command</strong>: the agent re-ran the exact same verify command without editing anything in between. Often indicates retrying after a transient failure or re-checking.</p><p><strong>seq-edit-after-failed-verify</strong>: a source edit immediately following a failed verify step. The agent is fixing a problem that a test revealed.</p><p><strong>seq-diagnose-read-after-failed-verify</strong>: the agent reads a file right after a verify failure. Investigating what went wrong.</p><p><strong>seq-diagnose-search-after-failed-verify</strong>: the agent searches (grep) right after a verify failure. Looking for the cause.</p><p><strong>seq-repro-after-edit</strong>: running a reproduce script after making edits. Checking if the original bug is fixed.</p><p><strong>seq-repro-rerun-same-command</strong>: re-running the same repro command without edits.</p><p><strong>seq-submit-after-verify</strong>: the submit step occurs after at least one verify step. The agent tested before submitting.</p><p><strong>seq-reread-edited-file</strong>: reading a file that was previously edited. Reviewing own changes.</p><p><strong>seq-first-all-pass</strong>: the first verify-pass that occurs after the last source edit. This marks the moment the agent's implementation first passes all tests.</p><p>Method: classify_sequence_layer() in classify_intent.py walks through the trajectory maintaining state (has a verify been seen? was there an edit since?). Labels are assigned based on the transition patterns.</p></div>
 <h2>9. Work-Done vs Resolved</h2>
-<table><thead><tr><th>model</th><th>wd+resolved</th><th>wd+unresolved</th><th>no_wd+resolved</th><th>no_wd+unresolved</th><th>total</th></tr></thead><tbody><tr><td>claude45</td><td>592</td><td>0</td><td>126</td><td>12</td><td>730</td></tr>
-<tr><td>gemini25pro</td><td>37</td><td>0</td><td>653</td><td>40</td><td>730</td></tr>
-<tr><td>glm45</td><td>296</td><td>2</td><td>417</td><td>15</td><td>730</td></tr>
-<tr><td>gpt5</td><td>82</td><td>0</td><td>541</td><td>107</td><td>730</td></tr>
+<table><thead><tr><th>model</th><th>wd+resolved</th><th>wd+unresolved</th><th>no_wd+resolved</th><th>no_wd+unresolved</th><th>total</th></tr></thead><tbody><tr><td>claude45</td><td>327</td><td>265</td><td>65</td><td>73</td><td>730</td></tr>
+<tr><td>gemini25pro</td><td>2</td><td>10</td><td>83</td><td>174</td><td>269</td></tr>
+<tr><td>glm45</td><td>134</td><td>164</td><td>189</td><td>243</td><td>730</td></tr>
+<tr><td>gpt5</td><td>49</td><td>33</td><td>291</td><td>357</td><td>730</td></tr>
 </tbody></table>
 <div class="notes"><p>A confusion matrix crossing two signals: whether the agent reached 'work-done' and whether the trajectory produced a submission.</p><p><strong>work-done</strong>: the trajectory contains a seq-first-all-pass label, meaning: after the agent's last source code edit, it ran a verify step that passed. This is a signal that the implementation is complete and working.</p><p><strong>resolved</strong>: the trajectory produced a submission (the agent ran the submit command, possibly with an error exit).</p><p><strong>wd+resolved</strong>: the agent's tests passed after its last edit, and it submitted. The best case.</p><p><strong>wd+unresolved</strong>: tests passed but the agent didn't submit. It may have continued editing after a passing test, or hit a timeout before submitting.</p><p><strong>no_wd+resolved</strong>: the agent submitted without ever reaching a clean test pass after its final edit. It submitted without confirmation that its code works.</p><p><strong>no_wd+unresolved</strong>: the agent neither achieved passing tests nor submitted. Complete failure to produce output.</p><p>Method: 'work-done' is computed by finding the last source edit step, then checking if any subsequent verify step has a 'pass' outcome. 'resolved' comes from the .traj metadata.</p></div>
 <h2>10. Structural Markers (% of trajectory)</h2>
-<table><thead><tr><th>marker</th><th>claude45_med</th><th>claude45_p25</th><th>claude45_p75</th><th>claude45_n</th><th>gemini25pro_med</th><th>gemini25pro_p25</th><th>gemini25pro_p75</th><th>gemini25pro_n</th><th>glm45_med</th><th>glm45_p25</th><th>glm45_p75</th><th>glm45_n</th><th>gpt5_med</th><th>gpt5_p25</th><th>gpt5_p75</th><th>gpt5_n</th></tr></thead><tbody><tr><td>first_edit</td><td>34.6</td><td>27.8</td><td>42.6</td><td>701</td><td>18.5</td><td>9.4</td><td>37.0</td><td>684</td><td>33.9</td><td>26.1</td><td>45.3</td><td>709</td><td>49.5</td><td>34.2</td><td>63.8</td><td>642</td></tr>
-<tr><td>last_edit</td><td>61.9</td><td>47.9</td><td>78.1</td><td>701</td><td>90.3</td><td>76.5</td><td>96.4</td><td>684</td><td>80.0</td><td>64.9</td><td>89.4</td><td>709</td><td>89.4</td><td>78.4</td><td>95.4</td><td>642</td></tr>
-<tr><td>first_verify</td><td>23.1</td><td>17.3</td><td>30.9</td><td>718</td><td>42.9</td><td>18.3</td><td>66.7</td><td>175</td><td>44.7</td><td>26.8</td><td>65.0</td><td>672</td><td>59.1</td><td>33.3</td><td>78.4</td><td>391</td></tr>
-<tr><td>first_verify_pass</td><td>28.8</td><td>19.7</td><td>47.7</td><td>639</td><td>71.6</td><td>34.0</td><td>89.7</td><td>58</td><td>70.4</td><td>53.3</td><td>85.9</td><td>331</td><td>71.8</td><td>40.7</td><td>85.2</td><td>130</td></tr>
-<tr><td>submit</td><td>100.0</td><td>100.0</td><td>100.0</td><td>644</td><td>100.0</td><td>100.0</td><td>100.0</td><td>558</td><td>100.0</td><td>100.0</td><td>100.0</td><td>595</td><td>100.0</td><td>100.0</td><td>100.0</td><td>443</td></tr>
+<table><thead><tr><th>marker</th><th>claude45_med</th><th>claude45_p25</th><th>claude45_p75</th><th>claude45_n</th><th>gemini25pro_med</th><th>gemini25pro_p25</th><th>gemini25pro_p75</th><th>gemini25pro_n</th><th>glm45_med</th><th>glm45_p25</th><th>glm45_p75</th><th>glm45_n</th><th>gpt5_med</th><th>gpt5_p25</th><th>gpt5_p75</th><th>gpt5_n</th></tr></thead><tbody><tr><td>first_edit</td><td>34.6</td><td>27.8</td><td>42.6</td><td>701</td><td>18.6</td><td>8.7</td><td>40.0</td><td>253</td><td>33.9</td><td>26.1</td><td>45.3</td><td>709</td><td>49.5</td><td>34.2</td><td>63.8</td><td>642</td></tr>
+<tr><td>last_edit</td><td>61.9</td><td>47.9</td><td>78.1</td><td>701</td><td>91.7</td><td>80.0</td><td>96.7</td><td>253</td><td>80.0</td><td>64.9</td><td>89.4</td><td>709</td><td>89.4</td><td>78.4</td><td>95.4</td><td>642</td></tr>
+<tr><td>first_verify</td><td>23.1</td><td>17.3</td><td>30.9</td><td>718</td><td>40.0</td><td>16.8</td><td>61.0</td><td>60</td><td>44.7</td><td>26.8</td><td>65.0</td><td>672</td><td>59.1</td><td>33.3</td><td>78.4</td><td>391</td></tr>
+<tr><td>first_verify_pass</td><td>28.8</td><td>19.7</td><td>47.7</td><td>639</td><td>59.5</td><td>21.7</td><td>84.4</td><td>22</td><td>70.4</td><td>53.3</td><td>85.9</td><td>331</td><td>71.8</td><td>40.7</td><td>85.2</td><td>130</td></tr>
+<tr><td>submit</td><td>100.0</td><td>100.0</td><td>100.0</td><td>644</td><td>100.0</td><td>100.0</td><td>100.0</td><td>194</td><td>100.0</td><td>100.0</td><td>100.0</td><td>595</td><td>100.0</td><td>100.0</td><td>100.0</td><td>443</td></tr>
 </tbody></table>
 <div class="notes"><p>Key events in each trajectory, expressed as a percentage of the way through (0% = first step, 100% = last step). Aggregated across all trajectories per model.</p><p><strong>first_edit</strong>: the position of the first source code edit (str_replace, insert, apply-patch, create-file).</p><p><strong>last_edit</strong>: the position of the last source code edit. The gap between last_edit and 100% is the 'tail' where the agent is verifying, cleaning up, or submitting but no longer changing code.</p><p><strong>first_verify</strong>: the position of the first verify step (test run, compile, syntax check).</p><p><strong>first_verify_pass</strong>: the position of the first verify step with a 'pass' outcome. Only counted for trajectories where at least one verify step passed.</p><p><strong>submit</strong>: the position of the submit step.</p><p><strong>_med / _p25 / _p75</strong>: median, 25th percentile, and 75th percentile across all trajectories.</p><p><strong>_n</strong>: number of trajectories where this event occurred (some trajectories never edit, never verify, or never submit).</p><p>Method: for each trajectory, we scan for the first/last occurrence of the relevant intent, compute index / (total_steps - 1) * 100, then take the median across trajectories.</p></div>
 <h2>12. Per-Repo Breakdown</h2>
-<table><thead><tr><th>repo</th><th>claude45_n</th><th>claude45_avg</th><th>claude45_res%</th><th>claude45_ver%</th><th>gemini25pro_n</th><th>gemini25pro_avg</th><th>gemini25pro_res%</th><th>gemini25pro_ver%</th><th>glm45_n</th><th>glm45_avg</th><th>glm45_res%</th><th>glm45_ver%</th><th>gpt5_n</th><th>gpt5_avg</th><th>gpt5_res%</th><th>gpt5_ver%</th></tr></thead><tbody><tr><td>ansible/ansible</td><td>96</td><td>82.5</td><td>99.0</td><td>33.7</td><td>96</td><td>44.1</td><td>97.9</td><td>6.8</td><td>96</td><td>52.4</td><td>97.9</td><td>26.7</td><td>96</td><td>65.5</td><td>97.9</td><td>8.8</td></tr>
-<tr><td>qutebrowser/qutebrowser</td><td>79</td><td>84.1</td><td>100.0</td><td>42.0</td><td>79</td><td>39.4</td><td>96.2</td><td>13.6</td><td>79</td><td>49.5</td><td>98.7</td><td>36.7</td><td>79</td><td>64.4</td><td>100.0</td><td>10.0</td></tr>
-<tr><td>flipt-io/flipt</td><td>85</td><td>73.9</td><td>98.8</td><td>27.6</td><td>85</td><td>65.6</td><td>95.3</td><td>7.2</td><td>85</td><td>58.8</td><td>95.3</td><td>26.6</td><td>85</td><td>62.2</td><td>89.4</td><td>1.7</td></tr>
-<tr><td>internetarchive/openlibrary</td><td>91</td><td>74.1</td><td>98.9</td><td>38.0</td><td>91</td><td>27.3</td><td>97.8</td><td>11.8</td><td>91</td><td>46.4</td><td>96.7</td><td>31.7</td><td>91</td><td>46.8</td><td>81.3</td><td>12.2</td></tr>
-<tr><td>gravitational/teleport</td><td>76</td><td>74.2</td><td>97.4</td><td>22.5</td><td>76</td><td>54.1</td><td>92.1</td><td>9.5</td><td>76</td><td>64.5</td><td>100.0</td><td>22.1</td><td>76</td><td>61.8</td><td>75.0</td><td>1.9</td></tr>
-<tr><td>navidrome/navidrome</td><td>57</td><td>74.2</td><td>96.5</td><td>28.6</td><td>57</td><td>48.8</td><td>87.7</td><td>8.8</td><td>57</td><td>60.8</td><td>98.2</td><td>26.5</td><td>57</td><td>61.2</td><td>87.7</td><td>2.3</td></tr>
-<tr><td>future-architect/vuls</td><td>62</td><td>70.1</td><td>96.8</td><td>25.5</td><td>62</td><td>39.4</td><td>95.2</td><td>3.7</td><td>62</td><td>52.8</td><td>96.8</td><td>24.6</td><td>62</td><td>54.0</td><td>82.3</td><td>1.9</td></tr>
-<tr><td>NodeBB/NodeBB</td><td>44</td><td>77.4</td><td>97.7</td><td>23.6</td><td>44</td><td>47.4</td><td>95.5</td><td>7.7</td><td>44</td><td>50.0</td><td>97.7</td><td>28.4</td><td>44</td><td>72.6</td><td>93.2</td><td>3.7</td></tr>
-<tr><td>element-hq/element-web</td><td>55</td><td>75.4</td><td>98.2</td><td>27.8</td><td>55</td><td>29.4</td><td>94.5</td><td>5.4</td><td>55</td><td>47.6</td><td>100.0</td><td>21.9</td><td>55</td><td>60.6</td><td>87.3</td><td>2.4</td></tr>
-<tr><td>protonmail/webclients</td><td>65</td><td>82.2</td><td>100.0</td><td>22.9</td><td>65</td><td>34.3</td><td>87.7</td><td>5.8</td><td>65</td><td>53.3</td><td>95.4</td><td>17.5</td><td>65</td><td>43.9</td><td>56.9</td><td>2.9</td></tr>
-<tr><td>tutao/tutanota</td><td>20</td><td>92.1</td><td>95.0</td><td>19.3</td><td>20</td><td>52.5</td><td>100.0</td><td>2.6</td><td>20</td><td>55</td><td>100.0</td><td>19.1</td><td>20</td><td>78.5</td><td>80.0</td><td>3.3</td></tr>
+<table><thead><tr><th>repo</th><th>claude45_n</th><th>claude45_avg</th><th>claude45_res%</th><th>claude45_ver%</th><th>gemini25pro_n</th><th>gemini25pro_avg</th><th>gemini25pro_res%</th><th>gemini25pro_ver%</th><th>glm45_n</th><th>glm45_avg</th><th>glm45_res%</th><th>glm45_ver%</th><th>gpt5_n</th><th>gpt5_avg</th><th>gpt5_res%</th><th>gpt5_ver%</th></tr></thead><tbody><tr><td>ansible/ansible</td><td>96</td><td>82.5</td><td>54.2</td><td>33.7</td><td>96</td><td>44.1</td><td>25.0</td><td>6.8</td><td>96</td><td>52.4</td><td>36.5</td><td>26.7</td><td>96</td><td>65.5</td><td>46.9</td><td>8.8</td></tr>
+<tr><td>flipt-io/flipt</td><td>85</td><td>73.9</td><td>55.3</td><td>27.6</td><td>74</td><td>58.5</td><td>18.9</td><td>8.7</td><td>85</td><td>58.8</td><td>38.8</td><td>26.6</td><td>85</td><td>62.2</td><td>38.8</td><td>1.7</td></tr>
+<tr><td>element-hq/element-web</td><td>55</td><td>75.4</td><td>76.4</td><td>27.8</td><td>55</td><td>29.4</td><td>70.9</td><td>5.4</td><td>55</td><td>47.6</td><td>67.3</td><td>21.9</td><td>55</td><td>60.6</td><td>74.5</td><td>2.4</td></tr>
+<tr><td>qutebrowser/qutebrowser</td><td>79</td><td>84.1</td><td>53.2</td><td>42.0</td><td></td><td></td><td></td><td></td><td>79</td><td>49.5</td><td>44.3</td><td>36.7</td><td>79</td><td>64.4</td><td>57.0</td><td>10.0</td></tr>
+<tr><td>internetarchive/openlibrary</td><td>91</td><td>74.1</td><td>54.9</td><td>38.0</td><td></td><td></td><td></td><td></td><td>91</td><td>46.4</td><td>47.3</td><td>31.7</td><td>91</td><td>46.8</td><td>44.0</td><td>12.2</td></tr>
+<tr><td>protonmail/webclients</td><td>65</td><td>82.2</td><td>90.8</td><td>22.9</td><td></td><td></td><td></td><td></td><td>65</td><td>53.3</td><td>81.5</td><td>17.5</td><td>65</td><td>43.9</td><td>75.4</td><td>2.9</td></tr>
+<tr><td>NodeBB/NodeBB</td><td>44</td><td>77.4</td><td>34.1</td><td>23.6</td><td>44</td><td>47.4</td><td>18.2</td><td>7.7</td><td>44</td><td>50.0</td><td>36.4</td><td>28.4</td><td>44</td><td>72.6</td><td>47.7</td><td>3.7</td></tr>
+<tr><td>gravitational/teleport</td><td>76</td><td>74.2</td><td>28.9</td><td>22.5</td><td></td><td></td><td></td><td></td><td>76</td><td>64.5</td><td>23.7</td><td>22.1</td><td>76</td><td>61.8</td><td>15.8</td><td>1.9</td></tr>
+<tr><td>navidrome/navidrome</td><td>57</td><td>74.2</td><td>42.1</td><td>28.6</td><td></td><td></td><td></td><td></td><td>57</td><td>60.8</td><td>38.6</td><td>26.5</td><td>57</td><td>61.2</td><td>36.8</td><td>2.3</td></tr>
+<tr><td>future-architect/vuls</td><td>62</td><td>70.1</td><td>48.4</td><td>25.5</td><td></td><td></td><td></td><td></td><td>62</td><td>52.8</td><td>37.1</td><td>24.6</td><td>62</td><td>54.0</td><td>37.1</td><td>1.9</td></tr>
+<tr><td>tutao/tutanota</td><td>20</td><td>92.1</td><td>45.0</td><td>19.3</td><td></td><td></td><td></td><td></td><td>20</td><td>55</td><td>40.0</td><td>19.1</td><td>20</td><td>78.5</td><td>50.0</td><td>3.3</td></tr>
 </tbody></table>
 <div class="notes"><p>Metrics broken down by source repository. SWE-Bench Pro tasks come from 11 open-source repos. This table shows whether the patterns hold across repos or are driven by specific ones.</p><p><strong>_n</strong>: number of task instances from this repo.</p><p><strong>_avg</strong>: average steps per trajectory.</p><p><strong>_res%</strong>: resolve rate (percentage of trajectories that produced a submission).</p><p><strong>_ver%</strong>: percentage of steps spent on verify actions.</p><p>Sorted by total number of instances across all models (most common repos first). Top 20 shown.</p></div>
 </body>

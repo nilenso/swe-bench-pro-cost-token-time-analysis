@@ -59,7 +59,8 @@ class FileResult:
     # Metadata from the traj file
     steps: int = 0
     exit_status: str = ""
-    resolved: bool = False
+    submitted: bool = False   # agent produced a submission (from traj metadata)
+    resolved: bool = False    # patch actually fixes the tests (from eval _output.json)
     work_done: bool = False
 
     # Phase profile (letter -> list of bin proportions)
@@ -83,6 +84,28 @@ def _parse_repo(instance_id: str) -> str:
     m = re.search(r"-(?:[0-9a-f]{7,40})(?:-v.*)?$", rest)
     repo = rest[:m.start()] if m else rest
     return f"{org}/{repo}"
+
+
+def _check_eval_resolved(traj_path: str) -> bool:
+    """Check if the eval _output.json shows all tests passing.
+
+    The eval dir mirrors the traj dir structure:
+      data/{model}/traj/{instance_id}/{instance_id}.traj
+      data/{model}/eval/{instance_id}/_output.json
+    """
+    traj = Path(traj_path)
+    instance_id = traj.stem
+    # Navigate: .../traj/{instance_dir}/{file}.traj -> .../eval/{instance_dir}/_output.json
+    eval_json = traj.parent.parent.parent / "eval" / traj.parent.name / "_output.json"
+    if not eval_json.exists():
+        return False
+    try:
+        import json
+        data = json.loads(eval_json.read_bytes())
+        tests = data.get("tests", [])
+        return bool(tests) and all(t.get("status") == "PASSED" for t in tests)
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
 
 
 def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | None:
@@ -137,8 +160,12 @@ def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | N
         "submit": pct(submit_idx),
     }
 
-    # Metadata
-    resolved = info.get("exit_status", "") == "submitted" or bool(info.get("submission"))
+    # Submission: did the agent produce a patch?
+    submitted = (info.get("exit_status") or "").startswith("submitted") or bool(info.get("submission"))
+
+    # Resolution: did the patch actually fix the tests?
+    # Check the eval _output.json alongside the traj file
+    resolved = _check_eval_resolved(path)
 
     # Phase profile: binned activity proportions across trajectory
     phase_profile: dict[str, list[float]] = {}
@@ -170,7 +197,8 @@ def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | N
         seq_label_counts=seq_label_counts,
         positions=positions,
         steps=n,
-        exit_status=info.get("exit_status", ""),
+        exit_status=info.get("exit_status", "") or "",
+        submitted=submitted,
         resolved=resolved,
         work_done="seq-first-all-pass" in seq_labels or "seq-work-done" in seq_labels,
         phase_profile=phase_profile,
