@@ -91,30 +91,6 @@ def render_html(payload: dict) -> str:
     }}
     canvas {{ display: block; }}
 
-    /* Phase heatmap */
-    .heatmap-grid {{
-      display: grid;
-      grid-template-columns: 80px repeat(10, 1fr);
-      gap: 2px;
-      font-size: 12px;
-      margin-bottom: 10px;
-    }}
-    .heatmap-label {{
-      display: flex; align-items: center; color: var(--text);
-      font-size: 11px;
-    }}
-    .heatmap-cell {{
-      height: 28px;
-      border-radius: 3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: rgba(255,255,255,0.7);
-    }}
-    .heatmap-header {{
-      font-size: 11px; color: var(--muted); text-align: center;
-    }}
     .model-tag {{
       display: inline-block;
       font-size: 12px;
@@ -136,6 +112,24 @@ def render_html(payload: dict) -> str:
     .side-by-side .chart-wrapper {{ margin-bottom: 0; }}
     .side-label {{
       font-size: 13px; font-style: italic; margin-bottom: 10px; color: var(--text);
+    }}
+    .stacked-panel-header {{
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 2px;
+    }}
+    .stacked-panel-header .model-tag {{
+      font-size: 13px;
+    }}
+    .stacked-panel-header .panel-subhead {{
+      font-size: 11.5px;
+      font-style: italic;
+      color: var(--muted);
+    }}
+    #stackedPanels .chart-wrapper {{
+      padding: 4px 0;
+      margin-bottom: 0;
     }}
 
     /* Dumbbell chart */
@@ -327,24 +321,7 @@ def render_html(payload: dict) -> str:
   <h1>Trajectory Analytics</h1>
   <div class="subtitle">SWE-Bench Pro &mdash; multi-model comparison</div>
 
-  <div class="legend">
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--gpt)"></div>
-      <span>GPT-5</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--claude)"></div>
-      <span>Sonnet 4.5</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--gemini)"></div>
-      <span>Gemini 2.5 Pro</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--glm)"></div>
-      <span>GLM-4.5</span>
-    </div>
-  </div>
+  <div class="legend" id="topLegend"></div>
 
   <h2>1. High-Level Action Frequencies</h2>
   <p class="chart-desc">Proportion of steps in each high-level category. Normalised so models are comparable despite different step counts.</p>
@@ -358,49 +335,17 @@ def render_html(payload: dict) -> str:
     <div id="heatTable"></div>
   </div>
 
-  <h2>3. Trajectory Length Distribution</h2>
-  <p class="chart-desc">How many steps each model typically takes per task.</p>
+  <h2>3. Steps per trajectory, by model</h2>
+  <p class="chart-desc">Cumulative share of runs that finished within N steps. Dashed line marks the 250-step cap.</p>
+  <p class="chart-desc" id="stepDistDesc"></p>
   <div class="chart-wrapper">
-    <canvas id="stepDistChart" height="280"></canvas>
+    <canvas id="stepDistChart" height="320"></canvas>
   </div>
 
   <h2>4. Typical Trajectory Shape</h2>
-  <p class="chart-desc">Stacked area chart: how the mix of actions evolves from start to end of the average trajectory.</p>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
-    <canvas id="stackedGpt" height="200"></canvas>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Sonnet 4.5</span></div>
-    <canvas id="stackedClaude" height="200"></canvas>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gemini">Gemini 2.5 Pro</span></div>
-    <canvas id="stackedGemini" height="200"></canvas>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag glm">GLM-4.5</span></div>
-    <canvas id="stackedGlm" height="200"></canvas>
-  </div>
+  <p class="chart-desc">Stacked area chart: how the mix of actions evolves from start to end of the average trajectory. Panels ordered by resolve rate (descending).</p>
+  <div id="stackedPanels"></div>
 
-  <h2>4b. Phase Profile — When Does Each Action Happen?</h2>
-  <p class="chart-desc">Each trajectory is divided into 20 equal time-slices (0%–100%). The heatmap shows what proportion of steps in each slice belong to each category. Read left-to-right as "beginning → end of trajectory".</p>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gpt">GPT-5</span></div>
-    <div id="heatmapGpt"></div>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Sonnet 4.5</span></div>
-    <div id="heatmapClaude"></div>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag gemini">Gemini 2.5 Pro</span></div>
-    <div id="heatmapGemini"></div>
-  </div>
-  <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag glm">GLM-4.5</span></div>
-    <div id="heatmapGlm"></div>
-  </div>
 
 </div>
 
@@ -424,7 +369,28 @@ function getCtx(id) {{
 
 const MODEL_COLORS = D.model_colors;
 const MODEL_NAMES = D.model_display_names;
-const ALL_MODELS = D.models;
+// Single source of truth for model order: resolve rate, descending.
+// Every section consumes ALL_MODELS, so they all line up.
+const ALL_MODELS = [...D.models].sort(
+  (a, b) => (D.resolve_rate[b] ?? -Infinity) - (D.resolve_rate[a] ?? -Infinity)
+);
+const tagClass = {{
+  'gpt5': 'gpt',
+  'claude45': 'claude',
+  'glm45': 'glm',
+  'gemini25pro': 'gemini',
+}};
+
+(function() {{
+  const el = document.getElementById('topLegend');
+  if (!el) return;
+  el.innerHTML = ALL_MODELS.map(m => (
+    `<div class="legend-item">` +
+      `<div class="legend-swatch" style="background:${{MODEL_COLORS[m]}}"></div>` +
+      `<span>${{MODEL_NAMES[m]}}</span>` +
+    `</div>`
+  )).join('');
+}})();
 const CLAUDE_COLOR = '#b8785e';
 const GPT_COLOR = '#6a8da8';
 const GLM_COLOR = '#6a9a6a';
@@ -642,43 +608,55 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 // 3. Step distribution — overlaid ECDFs
 (function() {{
   const {{ ctx, w, h }} = getCtx('stepDistChart');
-  const left = 54, right = 150, top = 20, bot = 46;
+  const left = 56, top = 22, bot = 46;
   const xMax = 250;
+
+  // Measure right-edge labels so the right margin always fits them
+  ctx.font = '11px sans-serif';
+  const sampleLabels = ALL_MODELS.map(m => `${{MODEL_NAMES[m]}} · 999 steps`);
+  const maxLabelW = Math.max(...sampleLabels.map(s => ctx.measureText(s).width));
+  const right = Math.ceil(maxLabelW) + 24;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const xPx = x => left + (x / xMax) * plotW;
   const yPx = y => top + (1 - y) * plotH;
 
-  // Build ECDF points per model from binned step counts
+  // Build ECDF points and censored fraction per model from binned step counts
   const cdfs = {{}};
+  const censored = {{}};
   for (const m of ALL_MODELS) {{
     const entries = Object.entries(D.step_dist[m])
       .map(([k, v]) => [Number(k), v])
       .sort((a, b) => a[0] - b[0]);
     const total = entries.reduce((s, [, v]) => s + v, 0) || 1;
-    let cum = 0;
+    let cum = 0, beforeCap = 0;
     const pts = [[0, 0]];
     for (const [bin, count] of entries) {{
+      if (bin < xMax) beforeCap += count;
       cum += count;
       pts.push([Math.min(bin, xMax), cum / total]);
     }}
     if (pts[pts.length - 1][1] < 1) pts.push([xMax, 1]);
     cdfs[m] = pts;
+    censored[m] = 1 - beforeCap / total;
   }}
 
-  // Horizontal guides at 0.25, 0.5, 0.75
-  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
-  ctx.font = '10px monospace'; ctx.textAlign = 'right';
-  for (const yv of [0, 0.25, 0.5, 0.75, 1]) {{
+  // Faint guides at 25% and 75%; stronger rule at 50%
+  ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 0.5;
+  for (const yv of [0.25, 0.75]) {{
     const py = yPx(yv);
-    if (yv === 0.25 || yv === 0.5 || yv === 0.75) {{
-      ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(left + plotW, py); ctx.stroke();
-    }}
-    ctx.fillStyle = MUTED;
-    ctx.fillText(yv.toFixed(2), left - 6, py + 3);
+    ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(left + plotW, py); ctx.stroke();
+  }}
+  ctx.strokeStyle = '#bdbdbd'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(left, yPx(0.5)); ctx.lineTo(left + plotW, yPx(0.5)); ctx.stroke();
+
+  // Y-axis labels in percent
+  ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  for (const yv of [0, 0.25, 0.5, 0.75, 1]) {{
+    ctx.fillText((yv * 100).toFixed(0) + '%', left - 6, yPx(yv) + 3);
   }}
 
-  // Baseline + cap rule
+  // Baseline
   ctx.strokeStyle = '#cfcfcf'; ctx.lineWidth = 0.5;
   ctx.beginPath(); ctx.moveTo(left, yPx(0)); ctx.lineTo(left + plotW, yPx(0)); ctx.stroke();
 
@@ -688,18 +666,18 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
     ctx.fillText(x, xPx(x), top + plotH + 14);
   }}
 
-  // Vertical dashed rule at the step cap
+  // Vertical dashed rule at the step cap; label sits at the bottom-right of the rule
   ctx.strokeStyle = '#999'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(xPx(xMax), top); ctx.lineTo(xPx(xMax), top + plotH); ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle = MUTED; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
-  ctx.fillText('step cap', xPx(xMax) - 4, top + 10);
+  ctx.fillText('step cap', xPx(xMax) - 4, top + plotH - 4);
 
-  // Step curves
+  // Step curves (staircase — keep it sharp, do not smooth)
   for (const m of ALL_MODELS) {{
     const pts = cdfs[m];
     ctx.strokeStyle = MODEL_COLORS[m];
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 1.7;
     ctx.beginPath();
     let prevY = yPx(0);
     ctx.moveTo(xPx(0), prevY);
@@ -729,38 +707,55 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
     medians[m] = med;
   }}
 
-  // Median ticks on each curve at y=0.5
+  // Filled dot on each curve where it crosses y=50%
   for (const m of ALL_MODELS) {{
     if (medians[m] == null) continue;
     const px = xPx(medians[m]);
     const py = yPx(0.5);
-    ctx.strokeStyle = MODEL_COLORS[m];
-    ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(px, py - 5); ctx.lineTo(px, py + 5); ctx.stroke();
+    ctx.fillStyle = MODEL_COLORS[m];
+    ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fffff8'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.stroke();
   }}
 
-  // Direct labels at right end with median annotation; offset to avoid overlap
-  const labels = ALL_MODELS.map(m => {{
+  // Censoring shelf annotation: small label hung below the plateau, near the cap
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  for (const m of ALL_MODELS) {{
+    const pct = censored[m] * 100;
+    if (pct < 1) continue;
     const pts = cdfs[m];
-    let yAtEdge = 1;
+    let yShelf = 1;
     for (let i = pts.length - 1; i >= 0; i--) {{
-      if (pts[i][0] < xMax) {{ yAtEdge = pts[i][1]; break; }}
+      if (pts[i][0] < xMax) {{ yShelf = pts[i][1]; break; }}
     }}
-    return {{ m, y: yAtEdge }};
-  }});
-  labels.sort((a, b) => b.y - a.y);
-  let lastPy = -Infinity;
-  ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
-  for (const item of labels) {{
-    let py = yPx(item.y);
-    if (py - lastPy < 14) py = lastPy + 14;
-    lastPy = py;
+    const px = xPx(xMax) - 6;
+    const py = yPx(yShelf) + 14;
+    ctx.fillStyle = MODEL_COLORS[m];
+    ctx.fillText(`~${{pct.toFixed(0)}}% hit cap`, px, py);
+  }}
+
+  // Direct labels at right end, sorted by median ascending so top→bottom
+  // mirrors the curves left→right at y=50%.
+  const labels = ALL_MODELS
+    .map(m => ({{ m, med: medians[m] }}))
+    .filter(d => d.med != null)
+    .sort((a, b) => a.med - b.med);
+  ctx.textAlign = 'left';
+  const lineH = 16;
+  const labelX = left + plotW + 10;
+  // Caption above the label stack — explains what the numbers mean once
+  ctx.font = 'italic 10px sans-serif'; ctx.fillStyle = MUTED;
+  ctx.fillText('half its runs finish in:', labelX, top + 4);
+  ctx.font = '11px sans-serif';
+  let py0 = top + 20;
+  for (let i = 0; i < labels.length; i++) {{
+    const item = labels[i];
+    const py = py0 + i * lineH;
     ctx.fillStyle = MODEL_COLORS[item.m];
-    const med = medians[item.m];
-    const text = med != null
-      ? `${{MODEL_NAMES[item.m]}} — median ${{Math.round(med)}}`
-      : MODEL_NAMES[item.m];
-    ctx.fillText(text, left + plotW + 8, py + 3);
+    ctx.fillText(
+      `${{MODEL_NAMES[item.m]}} · ${{Math.round(item.med)}} steps`,
+      labelX, py
+    );
   }}
 
   // Axis labels
@@ -769,91 +764,37 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   ctx.save();
   ctx.translate(14, top + plotH / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText('cumulative share of trajectories', 0, 0);
+  ctx.fillText('% of runs finished in ≤ N steps', 0, 0);
   ctx.restore();
+
+  // Findings-led second subhead, generated from the data
+  const desc = document.getElementById('stepDistDesc');
+  if (desc && labels.length) {{
+    const fastest = labels[0];
+    const slowest = labels[labels.length - 1];
+    const capHits = ALL_MODELS
+      .map(m => ({{ m, pct: censored[m] * 100 }}))
+      .filter(d => d.pct >= 1)
+      .sort((a, b) => b.pct - a.pct);
+    const parts = [
+      `${{MODEL_NAMES[fastest.m]}} finishes fastest (median ${{Math.round(fastest.med)}} steps)`,
+      `${{MODEL_NAMES[slowest.m]}} runs longest (median ${{Math.round(slowest.med)}})`,
+    ];
+    if (capHits.length) {{
+      parts.push(
+        capHits
+          .map(d => `~${{d.pct.toFixed(0)}}% of ${{MODEL_NAMES[d.m]}} runs hit the 250-step cap`)
+          .join('; ')
+      );
+    }}
+    desc.textContent = parts.join('; ') + '.';
+  }}
 }})();
-
-// Color interpolation helper: blend between panel bg and target color
-// t=0 → background, t=1 → full color
-function lerpColor(hex, t) {{
-  const bg = [255, 255, 248]; // #fffff8 (page bg)
-  const r = parseInt(hex.slice(1,3), 16);
-  const g = parseInt(hex.slice(3,5), 16);
-  const b = parseInt(hex.slice(5,7), 16);
-  const mr = Math.round(bg[0] + (r - bg[0]) * t);
-  const mg = Math.round(bg[1] + (g - bg[1]) * t);
-  const mb = Math.round(bg[2] + (b - bg[2]) * t);
-  return `rgb(${{mr}},${{mg}},${{mb}})`;
-}}
-
-// Render a heatmap. normalize='row' or 'col'.
-function drawHeatmap(containerId, model, normalize) {{
-  const el = document.getElementById(containerId);
-  const letters = ['R','S','P','E','V','G','H'];
-  const bins = 20;
-
-  // Renormalize: compute per-bin sum across shown letters
-  const binSums = new Array(bins).fill(0);
-  for (const l of letters) {{
-    const v = D.avg_phase[model][l];
-    for (let b = 0; b < bins; b++) binSums[b] += v[b];
-  }}
-
-  // Compute renormalized values (proportion of shown letters only)
-  const renormed = {{}};
-  for (const l of letters) {{
-    const raw = D.avg_phase[model][l];
-    renormed[l] = raw.map((v, b) => binSums[b] > 0 ? v / binSums[b] : 0);
-  }}
-
-  // Compute max per row or per column for scaling
-  const maxPerRow = {{}};
-  const maxPerCol = new Array(bins).fill(0);
-  for (const l of letters) {{
-    maxPerRow[l] = Math.max(...renormed[l]);
-    for (let b = 0; b < bins; b++) {{
-      if (renormed[l][b] > maxPerCol[b]) maxPerCol[b] = renormed[l][b];
-    }}
-  }}
-
-  let html = '<div class="heatmap-grid" style="grid-template-columns: 80px repeat(20, 1fr)">';
-  html += '<div></div>';
-  for (let b = 0; b < bins; b++) {{
-    html += `<div class="heatmap-header">${{b % 5 === 0 ? (b*5)+'%' : ''}}</div>`;
-  }}
-
-  for (const letter of letters) {{
-    const name = LETTER_TO_NAME[letter] || letter;
-    const color = LETTER_COLORS[letter];
-    html += `<div class="heatmap-label">${{name}}</div>`;
-    const vals = renormed[letter];
-    for (let b = 0; b < bins; b++) {{
-      const maxV = normalize === 'col' ? (maxPerCol[b] || 0.001) : (maxPerRow[letter] || 0.001);
-      const ratio = vals[b] / maxV;
-      // Use sqrt for better spread, but map 0 → 0 exactly
-      const pctVal = vals[b] * 100;
-      const t = pctVal < 0.5 ? 0 : 0.15 + Math.sqrt(ratio) * 0.85;
-      const bg = lerpColor(color, t);
-      const textColor = t > 0.5 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)';
-      html += `<div class="heatmap-cell" style="background:${{bg}};color:${{textColor}}">${{(vals[b]*100).toFixed(0)}}%</div>`;
-    }}
-  }}
-  html += '</div>';
-  el.innerHTML = html;
-}}
-
-// 5. Row-normalised
-drawHeatmap('heatmapGpt', 'gpt5', 'row');
-drawHeatmap('heatmapClaude', 'claude45', 'row');
-drawHeatmap('heatmapGlm', 'glm45', 'row');
-drawHeatmap('heatmapGemini', 'gemini25pro', 'row');
-
-// 5b. Column-normalised
 
 // 6. Stacked area charts — 5 grouped bands, inline labels
 function drawStackedArea(canvasId, model, annotations, markers) {{
   const {{ ctx, w, h }} = getCtx(canvasId);
-  const left = 40, right = 20, top = 30, bot = 10;
+  const left = 40, right = 130, top = 22, bot = 10;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
@@ -927,9 +868,9 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
     }}
   }}
 
-  // 50% vertical reference line (dashed, subtle)
+  // 50% vertical reference line (dashed, subtle — keep below the marker line)
   const halfX = xAt(10);
-  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
   ctx.beginPath();
@@ -938,22 +879,30 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Vertical markers above chart with ticks down
+  // Vertical marker line for last code change — medium charcoal, thin, opaque.
+  // No axis label; right-margin annotation describes it instead.
   if (markers) {{
     for (const m of markers) {{
       const mx = xAt(m.at / 5);
-      // Solid line through chart
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.strokeStyle = MUTED;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(mx, top);
       ctx.lineTo(mx, top + plotH);
       ctx.stroke();
-      // Label above
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.font = '9px Palatino, Georgia, serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(m.label, mx, top - 8);
+    }}
+
+    // Right-margin annotation: two italic muted lines describing the marker.
+    const m0 = markers[0];
+    if (m0 != null) {{
+      const post = 100 - m0.at;
+      ctx.fillStyle = MUTED;
+      ctx.font = 'italic 11px Palatino, Georgia, serif';
+      ctx.textAlign = 'left';
+      const ax = left + plotW + 12;
+      const ay = top + plotH / 2;
+      ctx.fillText(`last edit at ${{m0.at}}%`, ax, ay - 4);
+      ctx.fillText(`${{post}}% post-edit`, ax, ay + 12);
     }}
   }}
 
@@ -979,19 +928,29 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   }}
 }}
 
-const canvasMap = {{
-  'gpt5': 'stackedGpt',
-  'claude45': 'stackedClaude',
-  'glm45': 'stackedGlm',
-  'gemini25pro': 'stackedGemini',
-}};
-for (const m of ALL_MODELS) {{
-  const id = canvasMap[m];
-  if (!id) continue;
-  const mle = D.median_last_edit[m];
-  const markers = mle != null ? [{{ at: mle, label: `last code change (${{mle}}%)` }}] : null;
-  drawStackedArea(id, m, null, markers);
-}}
+(function() {{
+  const container = document.getElementById('stackedPanels');
+  if (!container) return;
+  for (const m of ALL_MODELS) {{
+    const wrap = document.createElement('div');
+    wrap.className = 'chart-wrapper';
+    const cls = tagClass[m] || '';
+    const rr = D.resolve_rate[m];
+    const sub = rr != null
+      ? `<span class="panel-subhead">${{rr.toFixed(1)}}% resolved</span>`
+      : '';
+    wrap.innerHTML =
+      `<div class="stacked-panel-header">` +
+        `<span class="model-tag ${{cls}}">${{MODEL_NAMES[m]}}</span>` +
+        sub +
+      `</div>` +
+      `<canvas id="stacked_${{m}}" height="150"></canvas>`;
+    container.appendChild(wrap);
+    const mle = D.median_last_edit[m];
+    const markers = mle != null ? [{{ at: mle }}] : null;
+    drawStackedArea(`stacked_${{m}}`, m, null, markers);
+  }}
+}})();
 
 </script>
 </body>

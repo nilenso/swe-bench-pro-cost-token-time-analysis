@@ -769,6 +769,110 @@ def render_verify_sections(results, models) -> list[tuple[str, str, str]]:
 
     return sections
 
+
+def _lerp_color(hex_color: str, t: float) -> str:
+    """Blend between #fffff8 (page bg) and hex_color. t=0 → bg, t=1 → full color."""
+    bg = (255, 255, 248)
+    r = int(hex_color[1:3], 16)
+    g = int(hex_color[3:5], 16)
+    b = int(hex_color[5:7], 16)
+    mr = round(bg[0] + (r - bg[0]) * t)
+    mg = round(bg[1] + (g - bg[1]) * t)
+    mb = round(bg[2] + (b - bg[2]) * t)
+    return f"rgb({mr},{mg},{mb})"
+
+
+def render_phase_profile_section(results, models) -> list[tuple[str, str, str]]:
+    """Section 11: Phase profile heatmaps (pure HTML, no JS)."""
+    from analysis.models import HIGH_LEVEL_LETTER, LETTER_TO_NAME, HIGH_LEVEL_COLORS
+    import math
+
+    letters = ["R", "S", "P", "E", "V", "G", "H"]
+    bins = 20
+
+    # Compute phase profiles from FileResult data
+    phase_data = {}  # model -> letter -> [bin_avg, ...]
+    for model in models:
+        data = results[model]
+        letter_bins = {l: [] for l in letters}
+        for r in data:
+            if not r.phase_profile:
+                continue
+            for l in letters:
+                if l in r.phase_profile:
+                    letter_bins[l].append(r.phase_profile[l])
+
+        avg = {}
+        for l in letters:
+            profiles = letter_bins[l]
+            if not profiles:
+                avg[l] = [0.0] * bins
+            else:
+                avg[l] = [sum(p[b] for p in profiles) / len(profiles) for b in range(bins)]
+        phase_data[model] = avg
+
+    # Build HTML heatmaps
+    viz_html = ""
+    for model in models:
+        avg = phase_data[model]
+        label = _model_label(model)
+        color = _model_color(model)
+
+        # Renormalize per bin (so columns sum to 1)
+        bin_sums = [0.0] * bins
+        for l in letters:
+            for b in range(bins):
+                bin_sums[b] += avg[l][b]
+
+        renormed = {}
+        for l in letters:
+            renormed[l] = [avg[l][b] / bin_sums[b] if bin_sums[b] > 0 else 0 for b in range(bins)]
+
+        viz_html += f'<div style="margin-bottom:20px"><div style="font-style:italic;color:{color};margin-bottom:6px">{label}</div>'
+        viz_html += '<div style="display:grid;grid-template-columns:90px repeat(20,1fr);gap:2px;font-size:10px">'
+
+        # Header row
+        viz_html += '<div></div>'
+        for b in range(bins):
+            viz_html += f'<div style="text-align:center;color:#999">{b*5}%</div>' if b % 5 == 0 else '<div></div>'
+
+        # Data rows
+        for l in letters:
+            cat_name = LETTER_TO_NAME.get(l, l)
+            cat_color = HIGH_LEVEL_COLORS.get(cat_name, "#888")
+            viz_html += f'<div style="display:flex;align-items:center;color:#555;font-size:11px">{cat_name}</div>'
+
+            vals = renormed[l]
+            max_v = max(vals) if vals else 0.01
+
+            for b in range(bins):
+                v = vals[b]
+                pct_val = v * 100
+                ratio = v / max_v if max_v > 0 else 0
+                t = 0 if pct_val < 0.5 else 0.15 + math.sqrt(ratio) * 0.85
+                bg = _lerp_color(cat_color, t)
+                text_color = "rgba(255,255,255,0.9)" if t > 0.5 else "rgba(0,0,0,0.45)"
+                viz_html += (
+                    f'<div style="height:26px;border-radius:2px;display:flex;align-items:center;'
+                    f'justify-content:center;background:{bg};color:{text_color}">'
+                    f'{pct_val:.0f}%</div>'
+                )
+
+        viz_html += '</div></div>'
+
+    sections = [(
+        "<h2>11. Phase Profile Heatmap</h2>",
+        f'<p style="color:#777;font-style:italic;margin-bottom:14px">Each trajectory divided into 20 time-slices. '
+        f'Cell intensity shows what proportion of steps in each slice belong to each category, normalized per column.</p>'
+        + viz_html,
+        "<p>Read left-to-right as beginning to end of trajectory. Brighter cells indicate the dominant action in that time-slice.</p>"
+        "<p>Categories: read, search, reproduce, edit, verify, git, housekeeping. Failed and other are excluded.</p>"
+        "<p>Normalized per column: within each time-slice, the percentages show each category's share relative to only the displayed categories.</p>"
+        "<p>Method: each trajectory's step sequence is divided into 20 equal bins. Per bin, we count the fraction of steps belonging to each category, then average across all trajectories for that model.</p>"
+    )]
+    return sections
+
+
 def render_repo_section(results, models) -> list[tuple[str, str, str]]:
     """Section 12: Per-repo breakdown with dot-plot visualization.
 
@@ -1519,6 +1623,9 @@ def render_html(results) -> str:
 
     # 9 & 10. Work-done vs Resolved + Structural Markers (with inline viz)
     sections.extend(render_structure_sections(results, models))
+
+    # 11. Phase profile heatmap
+    sections.extend(render_phase_profile_section(results, models))
 
     # 12. Per-repo breakdown
     sections.extend(render_repo_section(results, models))
