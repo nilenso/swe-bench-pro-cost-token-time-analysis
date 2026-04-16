@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build an HTML analytics page comparing GPT-5 vs Claude 4.5 trajectories.
+Build an HTML analytics page comparing model trajectories.
 
 Charts:
   1. High-level letter frequencies (bar chart, side-by-side)
@@ -23,6 +23,23 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import classify_intent as ci
+
+# Ordered list of models to include in all charts
+MODELS = ("gpt5", "claude45", "gemini25pro", "glm45")
+
+MODEL_DISPLAY_NAMES = {
+    "gpt5": "GPT-5",
+    "claude45": "Claude 4.5 Sonnet",
+    "glm45": "GLM-4.5",
+    "gemini25pro": "Gemini 2.5 Pro",
+}
+
+MODEL_CSS_COLORS = {
+    "gpt5": "#6a8da8",
+    "claude45": "#b8785e",
+    "glm45": "#9a6a9a",
+    "gemini25pro": "#6a9a6a",
+}
 
 # Single-letter codes for transition matrices and sequence analysis only
 HIGH_LEVEL_LETTER = {
@@ -69,7 +86,7 @@ def parse_repo(instance_id: str) -> str:
 
 def collect_files(data_root: Path) -> list[tuple[str, Path]]:
     out: list[tuple[str, Path]] = []
-    for model in ("gpt5", "claude45"):
+    for model in MODELS:
         base = data_root / model / "traj"
         if not base.exists():
             continue
@@ -216,15 +233,14 @@ def build_payload(data_root: Path) -> dict:
     files = collect_files(data_root)
 
     # Per-model accumulators
-    high_counts: dict[str, Counter] = {"gpt5": Counter(), "claude45": Counter()}
-    low_counts: dict[str, Counter] = {"gpt5": Counter(), "claude45": Counter()}
-    bigram_counts: dict[str, Counter] = {"gpt5": Counter(), "claude45": Counter()}
+    high_counts: dict[str, Counter] = {m: Counter() for m in MODELS}
+    low_counts: dict[str, Counter] = {m: Counter() for m in MODELS}
+    bigram_counts: dict[str, Counter] = {m: Counter() for m in MODELS}
 
-    all_high_seqs: dict[str, list[str]] = {"gpt5": [], "claude45": []}
-    step_counts: dict[str, list[int]] = {"gpt5": [], "claude45": []}
+    all_high_seqs: dict[str, list[str]] = {m: [] for m in MODELS}
+    step_counts: dict[str, list[int]] = {m: [] for m in MODELS}
     phase_profiles: dict[str, dict[str, list[list[float]]]] = {
-        "gpt5": {l: [] for l in HIGH_LEVEL_LETTER.values()},
-        "claude45": {l: [] for l in HIGH_LEVEL_LETTER.values()},
+        m: {l: [] for l in HIGH_LEVEL_LETTER.values()} for m in MODELS
     }
 
     tasks = [(model, str(path)) for model, path in files]
@@ -245,7 +261,7 @@ def build_payload(data_root: Path) -> dict:
 
     # Aggregate phase profiles: average across trajectories
     avg_phase: dict[str, dict[str, list[float]]] = {}
-    for model in ("gpt5", "claude45"):
+    for model in MODELS:
         avg_phase[model] = {}
         for letter in HIGH_LEVEL_LETTER.values():
             profiles = phase_profiles[model][letter]
@@ -267,7 +283,7 @@ def build_payload(data_root: Path) -> dict:
     # Build transition matrices (row=from, col=to) as proportions
     ordered_letters = ["R", "S", "P", "E", "V", "G", "H", "X", "O"]
     bigram_matrix: dict[str, list[list[float]]] = {}
-    for model in ("gpt5", "claude45"):
+    for model in MODELS:
         total_bg = sum(bigram_counts[model].values())
         if total_bg == 0:
             bigram_matrix[model] = [[0.0] * len(ordered_letters) for _ in ordered_letters]
@@ -282,19 +298,19 @@ def build_payload(data_root: Path) -> dict:
 
     # Also keep top bigrams list for reference
     top_bigrams_set = set()
-    for model in ("gpt5", "claude45"):
+    for model in MODELS:
         for bg, _ in bigram_counts[model].most_common(20):
             top_bigrams_set.add(bg)
-    top_bigrams = sorted(top_bigrams_set, key=lambda b: -(bigram_counts["gpt5"].get(b, 0) + bigram_counts["claude45"].get(b, 0)))
+    top_bigrams = sorted(top_bigrams_set, key=lambda b: -sum(bigram_counts[m].get(b, 0) for m in MODELS))
 
     # Get all intents from displayed categories (exclude failed/X)
     displayed_categories = {"read", "search", "reproduce", "edit", "verify", "git", "housekeeping", "other"}
     top_low_set = set()
     for intent, high in ci.INTENT_TO_HIGH_LEVEL.items():
         if high in displayed_categories:
-            if low_counts["gpt5"].get(intent, 0) + low_counts["claude45"].get(intent, 0) > 0:
+            if sum(low_counts[m].get(intent, 0) for m in MODELS) > 0:
                 top_low_set.add(intent)
-    top_low = sorted(top_low_set, key=lambda i: -(low_counts["gpt5"].get(i, 0) + low_counts["claude45"].get(i, 0)))
+    top_low = sorted(top_low_set, key=lambda i: -sum(low_counts[m].get(i, 0) for m in MODELS))
 
     # Step count distributions (binned)
     def bin_steps(counts, bin_size=5):
@@ -307,18 +323,21 @@ def build_payload(data_root: Path) -> dict:
         return dict(sorted(bins.items()))
 
     return {
-        "high_counts": {m: dict(high_counts[m].most_common()) for m in ("gpt5", "claude45")},
+        "models": list(MODELS),
+        "model_display_names": MODEL_DISPLAY_NAMES,
+        "model_colors": MODEL_CSS_COLORS,
+        "high_counts": {m: dict(high_counts[m].most_common()) for m in MODELS},
         "high_proportions": {
             m: {LETTER_TO_NAME.get(k, k): v for k, v in to_proportions(high_counts[m]).items()}
-            for m in ("gpt5", "claude45")
+            for m in MODELS
         },
-        "low_proportions": {m: to_proportions(low_counts[m]) for m in ("gpt5", "claude45")},
+        "low_proportions": {m: to_proportions(low_counts[m]) for m in MODELS},
         "top_low_intents": top_low,
         "bigram_matrix": bigram_matrix,
         "bigram_letters": ordered_letters,
         "avg_phase": avg_phase,
-        "step_dist": {m: bin_steps(step_counts[m]) for m in ("gpt5", "claude45")},
-        "num_trajs": {m: len(all_high_seqs[m]) for m in ("gpt5", "claude45")},
+        "step_dist": {m: bin_steps(step_counts[m]) for m in MODELS},
+        "num_trajs": {m: len(all_high_seqs[m]) for m in MODELS},
         "high_level_letter": HIGH_LEVEL_LETTER,
         "letter_to_name": LETTER_TO_NAME,
         "name_to_letter": HIGH_LEVEL_LETTER,
@@ -338,7 +357,7 @@ def render_html(payload: dict) -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GPT-5 vs Claude 4.5 — Trajectory Analytics</title>
+  <title>Trajectory Analytics — SWE-Bench Pro</title>
   <style>
     :root {{
       --bg: #fffff8;
@@ -349,6 +368,8 @@ def render_html(payload: dict) -> str:
       --border: #ddd;
       --claude: #b8785e;
       --gpt: #6a8da8;
+      --glm: #9a6a9a;
+      --gemini: #6a9a6a;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -417,6 +438,8 @@ def render_html(payload: dict) -> str:
     }}
     .model-tag.gpt {{ color: var(--gpt); }}
     .model-tag.claude {{ color: var(--claude); }}
+    .model-tag.glm {{ color: var(--glm); }}
+    .model-tag.gemini {{ color: var(--gemini); }}
 
     .side-by-side {{
       display: grid;
@@ -617,8 +640,8 @@ def render_html(payload: dict) -> str:
 </head>
 <body>
 <div class="container">
-  <h1>GPT-5 vs Claude 4.5</h1>
-  <div class="subtitle">Trajectory behaviour analytics &mdash; SWE-Bench Pro</div>
+  <h1>Trajectory Analytics</h1>
+  <div class="subtitle">SWE-Bench Pro &mdash; multi-model comparison</div>
 
   <div class="legend">
     <div class="legend-item">
@@ -627,7 +650,15 @@ def render_html(payload: dict) -> str:
     </div>
     <div class="legend-item">
       <div class="legend-swatch" style="background:var(--claude)"></div>
-      <span>Claude 4.5</span>
+      <span>Claude 4.5 Sonnet</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--gemini)"></div>
+      <span>Gemini 2.5 Pro</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--glm)"></div>
+      <span>GLM-4.5</span>
     </div>
   </div>
 
@@ -638,7 +669,7 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>2. Intent Comparison</h2>
-  <p class="chart-desc">Frequency per 100 steps. <span style="color:var(--claude)">Claude 4.5</span> / <span style="color:var(--gpt)">GPT-5</span>.</p>
+  <p class="chart-desc">Frequency per 100 steps, compared across all models.</p>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
@@ -656,8 +687,16 @@ def render_html(payload: dict) -> str:
     <canvas id="stackedGpt" height="200"></canvas>
   </div>
   <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
+    <div class="side-label"><span class="model-tag claude">Claude 4.5 Sonnet</span></div>
     <canvas id="stackedClaude" height="200"></canvas>
+  </div>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag gemini">Gemini 2.5 Pro</span></div>
+    <canvas id="stackedGemini" height="200"></canvas>
+  </div>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag glm">GLM-4.5</span></div>
+    <canvas id="stackedGlm" height="200"></canvas>
   </div>
 
   <h2>4b. Phase Profile — When Does Each Action Happen?</h2>
@@ -667,8 +706,16 @@ def render_html(payload: dict) -> str:
     <div id="heatmapGpt"></div>
   </div>
   <div class="chart-wrapper">
-    <div class="side-label"><span class="model-tag claude">Claude 4.5</span></div>
+    <div class="side-label"><span class="model-tag claude">Claude 4.5 Sonnet</span></div>
     <div id="heatmapClaude"></div>
+  </div>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag gemini">Gemini 2.5 Pro</span></div>
+    <div id="heatmapGemini"></div>
+  </div>
+  <div class="chart-wrapper">
+    <div class="side-label"><span class="model-tag glm">GLM-4.5</span></div>
+    <div id="heatmapGlm"></div>
   </div>
 
 </div>
@@ -691,8 +738,13 @@ function getCtx(id) {{
   return {{ canvas: c, ctx, w: cssW, h: cssH }};
 }}
 
+const MODEL_COLORS = D.model_colors;
+const MODEL_NAMES = D.model_display_names;
+const ALL_MODELS = D.models;
 const CLAUDE_COLOR = '#b8785e';
 const GPT_COLOR = '#6a8da8';
+const GLM_COLOR = '#6a9a6a';
+const GEMINI_COLOR = '#9a6a9a';
 const MUTED = '#6b7280';
 const TEXT = '#1a1a1a';
 
@@ -794,10 +846,9 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 (function() {{
   const el = document.getElementById('highPaired');
   const cats = CATEGORY_NAMES;
-  const maxVal = Math.max(...cats.map(c => Math.max(
-    D.high_proportions.gpt5[c] || 0,
-    D.high_proportions.claude45[c] || 0
-  )));
+  const maxVal = Math.max(...cats.map(c =>
+    Math.max(...ALL_MODELS.map(m => D.high_proportions[m][c] || 0))
+  ));
 
   function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
 
@@ -805,34 +856,30 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
     <thead><tr>
       <th></th>
       <th style="text-align:left;padding-left:4px">
-        <span style="color:${{CLAUDE_COLOR}}">Claude</span>
-        <span style="color:var(--muted);padding:0 6px">/</span>
-        <span style="color:${{GPT_COLOR}}">GPT</span>
+        ${{ALL_MODELS.map(m => `<span style="color:${{MODEL_COLORS[m]}}">${{MODEL_NAMES[m]}}</span>`).join(' <span style="color:var(--muted);padding:0 4px">/</span> ')}}
         <span style="color:var(--muted);font-weight:400;padding-left:8px">% of steps</span>
       </th>
     </tr></thead><tbody>`;
 
   let rowIdx = 0;
   for (const cat of cats) {{
-    const g = (D.high_proportions.gpt5[cat] || 0) * 100;
-    const c = (D.high_proportions.claude45[cat] || 0) * 100;
-    const gap = Math.abs(g - c);
-    const gBold = g > c && gap >= 0.3 ? 'font-weight:700' : '';
-    const cBold = c > g && gap >= 0.3 ? 'font-weight:700' : '';
+    const vals = ALL_MODELS.map(m => (D.high_proportions[m][cat] || 0) * 100);
+    const best = Math.max(...vals);
     const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
 
     html += `<tr class="paired-row${{zebra}}">
       <td class="paired-name">${{cat}}</td>
-      <td class="paired-bars">
-        <div class="paired-bar-row">
-          <div class="paired-bar" style="width:${{barPct(c / 100)}}%;background:${{CLAUDE_COLOR}}"></div>
-          <span class="paired-bar-val" style="color:${{CLAUDE_COLOR}};${{cBold}}">${{c.toFixed(1)}}</span>
-        </div>
-        <div class="paired-bar-row">
-          <div class="paired-bar" style="width:${{barPct(g / 100)}}%;background:${{GPT_COLOR}}"></div>
-          <span class="paired-bar-val" style="color:${{GPT_COLOR}};${{gBold}}">${{g.toFixed(1)}}</span>
-        </div>
-      </td>
+      <td class="paired-bars">`;
+    for (let mi = 0; mi < ALL_MODELS.length; mi++) {{
+      const m = ALL_MODELS[mi];
+      const v = vals[mi];
+      const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
+      html += `<div class="paired-bar-row">
+          <div class="paired-bar" style="width:${{barPct(v / 100)}}%;background:${{MODEL_COLORS[m]}}"></div>
+          <span class="paired-bar-val" style="color:${{MODEL_COLORS[m]}};${{bold}}">${{v.toFixed(1)}}</span>
+        </div>`;
+    }}
+    html += `</td>
     </tr>`;
     rowIdx++;
   }}
@@ -848,22 +895,16 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   const catMap = D.intent_to_category || {{}};
   const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  const catAnnotations = {{
-    'read': 'GPT reads 1.6x more, especially full files. Over a third of its steps are reading.',
-    'search': 'Both grep at similar rates. Claude also runs find | grep and finds files by name (9 per 100 steps vs 0.1 for GPT).',
-    'reproduce': 'GPT writes and runs reproduction scripts 4x more often.',
-    'edit': 'Similar edit rates overall. GPT also uses insert (1.9 per 100). Claude edits exclusively via str_replace.',
-    'verify': 'Claude spends 28% of steps verifying (8x GPT), running test suites, writing test files, and compiling.',
-    'git': 'Claude regularly runs git diff and git log to review its own changes. GPT uses git in 0.1% of steps.',
-    'housekeeping': 'Claude cleans up with rm/mv/cp (2.7 per 100) and writes documentation files. GPT does 0.1 per 100.',
-  }};
-
   const rows = intents.map(intent => {{
-    const g = (D.low_proportions.gpt5[intent] || 0) * 100;
-    const c = (D.low_proportions.claude45[intent] || 0) * 100;
+    const vals = {{}};
+    let maxV = 0;
+    for (const m of ALL_MODELS) {{
+      vals[m] = (D.low_proportions[m][intent] || 0) * 100;
+      if (vals[m] > maxV) maxV = vals[m];
+    }}
     const cat = catMap[intent] || '?';
-    return {{ intent, g, c, gap: Math.abs(g - c), cat }};
-  }}).filter(r => r.g > 1.5 || r.c > 1.5);
+    return {{ intent, vals, maxV, cat }};
+  }}).filter(r => r.maxV > 1.5);
 
   {{
 
@@ -873,10 +914,10 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
       grouped[r.cat].push(r);
     }}
     for (const cat of Object.keys(grouped)) {{
-      grouped[cat].sort((a, b) => b.gap - a.gap);
+      grouped[cat].sort((a, b) => b.maxV - a.maxV);
     }}
 
-    const maxVal = Math.max(...rows.map(r => Math.max(r.g, r.c)), 1);
+    const maxVal = Math.max(...rows.map(r => r.maxV), 1);
     function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
 
     let html = `<table class="paired-table">
@@ -885,27 +926,25 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
     let rowIdx = 0;
     for (const cat of catOrder) {{
       if (!grouped[cat] || grouped[cat].length === 0) continue;
-      const ann = catAnnotations[cat] || '';
-      html += `<tr class="cat-header"><td colspan="2">${{cat}}${{ann ? `<div class="cat-annotation">${{ann}}</div>` : ''}}</td></tr>`;
+      html += `<tr class="cat-header"><td colspan="2">${{cat}}</td></tr>`;
 
       for (const r of grouped[cat]) {{
-        const gBold = r.g > r.c && r.gap >= 0.3 ? 'font-weight:700' : '';
-        const cBold = r.c > r.g && r.gap >= 0.3 ? 'font-weight:700' : '';
         const displayName = (D.intent_display_names || {{}})[r.intent] || r.intent;
         const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
+        const best = Math.max(...ALL_MODELS.map(m => r.vals[m]));
 
         html += `<tr class="paired-row${{zebra}}">
           <td class="paired-name" title="${{r.intent}}">${{displayName}}</td>
-          <td class="paired-bars">
-            <div class="paired-bar-row">
-              <div class="paired-bar" style="width:${{barPct(r.c)}}%;background:${{CLAUDE_COLOR}}"></div>
-              <span class="paired-bar-val" style="color:${{CLAUDE_COLOR}};${{cBold}}">${{r.c.toFixed(1)}}</span>
-            </div>
-            <div class="paired-bar-row">
-              <div class="paired-bar" style="width:${{barPct(r.g)}}%;background:${{GPT_COLOR}}"></div>
-              <span class="paired-bar-val" style="color:${{GPT_COLOR}};${{gBold}}">${{r.g.toFixed(1)}}</span>
-            </div>
-          </td>
+          <td class="paired-bars">`;
+        for (const m of ALL_MODELS) {{
+          const v = r.vals[m];
+          const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
+          html += `<div class="paired-bar-row">
+              <div class="paired-bar" style="width:${{barPct(v)}}%;background:${{MODEL_COLORS[m]}}"></div>
+              <span class="paired-bar-val" style="color:${{MODEL_COLORS[m]}};${{bold}}">${{v.toFixed(1)}}</span>
+            </div>`;
+        }}
+        html += `</td>
         </tr>`;
         rowIdx++;
       }}
@@ -920,23 +959,29 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 (function() {{
   const {{ ctx, w, h }} = getCtx('stepDistChart');
   const left = 50, right = 20, top = 20, bot = 50;
-  const allBins = new Set([
-    ...Object.keys(D.step_dist.gpt5).map(Number),
-    ...Object.keys(D.step_dist.claude45).map(Number),
-  ]);
+  const allBins = new Set();
+  for (const m of ALL_MODELS) {{
+    for (const k of Object.keys(D.step_dist[m])) allBins.add(Number(k));
+  }}
   const bins = [...allBins].sort((a,b) => a - b);
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const n = bins.length;
+  const nm = ALL_MODELS.length;
   const groupW = plotW / n;
-  const barW = groupW * 0.38;
+  const barW = groupW * 0.8 / nm;
 
-  const gptTotal = Object.values(D.step_dist.gpt5).reduce((a,b) => a+b, 0);
-  const claudeTotal = Object.values(D.step_dist.claude45).reduce((a,b) => a+b, 0);
+  const totals = {{}};
+  const modelVals = {{}};
+  for (const m of ALL_MODELS) {{
+    totals[m] = Object.values(D.step_dist[m]).reduce((a,b) => a+b, 0) || 1;
+    modelVals[m] = bins.map(b => (D.step_dist[m][b] || 0) / totals[m]);
+  }}
 
-  const gptVals = bins.map(b => (D.step_dist.gpt5[b] || 0) / gptTotal);
-  const claudeVals = bins.map(b => (D.step_dist.claude45[b] || 0) / claudeTotal);
-  const maxVal = Math.max(...gptVals, ...claudeVals, 0.01);
+  let maxVal = 0.01;
+  for (const m of ALL_MODELS) {{
+    for (const v of modelVals[m]) if (v > maxVal) maxVal = v;
+  }}
 
   ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {{
@@ -947,19 +992,20 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   }}
 
   for (let i = 0; i < n; i++) {{
-    const x = left + i * groupW + groupW * 0.08;
-    const gH = (gptVals[i] / maxVal) * plotH;
-    const cH = (claudeVals[i] / maxVal) * plotH;
+    const x0 = left + i * groupW + groupW * 0.05;
     ctx.globalAlpha = 0.85;
-    ctx.fillStyle = GPT_COLOR;
-    ctx.fillRect(x, top + plotH - gH, barW, gH);
-    ctx.fillStyle = CLAUDE_COLOR;
-    ctx.fillRect(x + barW + 1, top + plotH - cH, barW, cH);
+    for (let mi = 0; mi < nm; mi++) {{
+      const m = ALL_MODELS[mi];
+      const v = modelVals[m][i];
+      const bH = (v / maxVal) * plotH;
+      ctx.fillStyle = MODEL_COLORS[m];
+      ctx.fillRect(x0 + mi * (barW + 1), top + plotH - bH, barW, bH);
+    }}
     ctx.globalAlpha = 1;
 
     if (i % 2 === 0 || n < 20) {{
       ctx.fillStyle = MUTED; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(bins[i], x + barW, top + plotH + 14);
+      ctx.fillText(bins[i], x0 + (nm * (barW + 1)) / 2, top + plotH + 14);
     }}
   }}
   ctx.fillStyle = MUTED; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
@@ -1038,6 +1084,8 @@ function drawHeatmap(containerId, model, normalize) {{
 // 5. Row-normalised
 drawHeatmap('heatmapGpt', 'gpt5', 'row');
 drawHeatmap('heatmapClaude', 'claude45', 'row');
+drawHeatmap('heatmapGlm', 'glm45', 'row');
+drawHeatmap('heatmapGemini', 'gemini25pro', 'row');
 
 // 5b. Column-normalised
 
@@ -1174,6 +1222,8 @@ drawStackedArea('stackedGpt', 'gpt5', null,
   [{{ at: 89, label: 'median last edit (89%)' }}]);
 drawStackedArea('stackedClaude', 'claude45', null,
   [{{ at: 61, label: 'median last edit (61%)' }}]);
+drawStackedArea('stackedGlm', 'glm45', null, null);
+drawStackedArea('stackedGemini', 'gemini25pro', null, null);
 
 </script>
 </body>
@@ -1195,7 +1245,8 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
     print(f"Wrote {out}")
-    print(f"gpt5={payload['num_trajs']['gpt5']} claude45={payload['num_trajs']['claude45']}")
+    counts = " ".join(f"{m}={payload['num_trajs'][m]}" for m in MODELS)
+    print(counts)
 
 
 if __name__ == "__main__":
