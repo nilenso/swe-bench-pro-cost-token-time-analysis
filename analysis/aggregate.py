@@ -472,13 +472,20 @@ def build_analytics_payload(results: Results) -> dict:
         INTENT_TO_HIGH_LEVEL,
         LETTER_COLORS,
         LETTER_TO_NAME,
+        MODELS,
     )
 
     bf = base_intent_frequencies(results)
     hlf = high_level_frequencies(results)
     bg = bigram_matrix(results)
 
+    # Only include models that are in the results
+    active_models = [m for m in MODELS if m in results]
+
     return {
+        "models": active_models,
+        "model_display_names": {m: MODELS[m]["label"] for m in active_models},
+        "model_colors": {m: MODELS[m]["color"] for m in active_models},
         "high_counts": hlf["counts"],
         "high_proportions": hlf["proportions"],
         "low_proportions": bf["proportions"],
