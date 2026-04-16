@@ -105,7 +105,7 @@ def _load_resolution_map() -> dict[str, dict[str, bool]]:
         "Claude 4.5 Sonnet - 10132025": "claude45",
         "GPT-5 - 10132025": "gpt5",
         "GLM-4.5 -- 10222025": "glm45",
-        # Gemini: no matching CSV entry for our data
+        "Gemini 2.5 Pro Preview -- debug-oct22": "gemini25pro",
     }
 
     result: dict[str, dict[str, bool]] = {}
