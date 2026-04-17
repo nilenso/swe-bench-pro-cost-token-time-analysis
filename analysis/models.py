@@ -25,7 +25,7 @@ import classify_intent as _ci  # noqa: E402
 # Model registry -- add new models here and everything else adapts.
 # ---------------------------------------------------------------------------
 MODELS: dict[str, dict] = {
-    "claude45": {"label": "Claude 4.5", "color": "#b8785e"},
+    "claude45": {"label": "Sonnet 4.5", "color": "#b8785e"},
     "gpt5": {"label": "GPT-5", "color": "#6a8da8"},
     "gemini25pro": {"label": "Gemini 2.5 Pro", "color": "#5a9a6a"},
     "glm45": {"label": "GLM 4.5", "color": "#8a6a9a"},
