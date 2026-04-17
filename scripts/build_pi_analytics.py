@@ -840,7 +840,7 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
     {{ name: 'reproduce',    letters: ['P'],     color: '#b0956a' }},
     {{ name: 'edit',         letters: ['E'],     color: '#4a8a5a' }},
     {{ name: 'verify',       letters: ['V'],     color: '#b56a50' }},
-    {{ name: 'git',          letters: ['G'],     color: '#3a8a8a' }},
+    {{ name: 'git',          letters: ['G'],     color: '#8a7a5a' }},
     {{ name: 'housekeeping', letters: ['H'],     color: '#7a9a52' }},
   ];
 
