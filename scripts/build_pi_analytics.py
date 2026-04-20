@@ -16,15 +16,59 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 from pathlib import Path
 
 # Add project root to path for analysis package
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from analysis.orchestrate import process_all as process_benchmark_all
+from analysis.aggregate import build_analytics_payload as build_benchmark_payload, phase_profiles as benchmark_phase_profiles
 from analysis_pi.orchestrate import process_all
-from analysis_pi.aggregate import build_analytics_payload
+from analysis_pi.aggregate import build_analytics_payload, phase_profiles as pi_phase_profiles
 from analysis_pi.session_filter import DEFAULT_EXACT_MODELS, SessionFilter, collect_filtered_paths
+from analysis_pi.user_messages import analyze_user_messages
+
+
+BENCHMARK_PAIR_FOR_PI_MODEL = {
+    "claude-opus-4-5": "claude45",
+    "claude-opus-4-6": "claude45",
+    "gpt-5.2-codex": "gpt5",
+    "gpt-5.3-codex": "gpt5",
+    "gpt-5.4": "gpt5",
+}
+
+INTERVENTION_MACROS = [
+    {
+        "key": "authorization",
+        "members": ["authorize_work"],
+        "label": "authorization",
+        "symbol": "△",
+        "color": "#4a8a5a",
+    },
+    {
+        "key": "steering",
+        "members": ["solution_steer", "evidence_or_repro", "qa_or_critique", "validation_request"],
+        "label": "steering",
+        "symbol": "○",
+        "color": "#b56a50",
+    },
+    {
+        "key": "closeout",
+        "members": ["workflow_closeout"],
+        "label": "closeout",
+        "symbol": "□",
+        "color": "#8a6a9a",
+    },
+]
+
+LAST_EDIT_MARKER = {
+    "key": "last_edit",
+    "label": "last edit",
+    "symbol": "◇",
+    "color": "#6b7280",
+}
 
 
 def _filter_results_to_paths(results: dict[str, list], allowed_paths: dict[str, set[str]]) -> dict[str, list]:
@@ -39,10 +83,157 @@ def _filter_results_to_paths(results: dict[str, list], allowed_paths: dict[str, 
     return out
 
 
+def _summarize_positions(vals: list[float]) -> dict[str, float | None]:
+    vals = sorted(vals)
+    if not vals:
+        return {"median": None, "p25": None, "p75": None}
+    if len(vals) >= 2:
+        p25 = round(statistics.quantiles(vals, n=4)[0], 1)
+        p75 = round(statistics.quantiles(vals, n=4)[2], 1)
+    else:
+        p25 = p75 = round(vals[0], 1)
+    return {
+        "median": round(statistics.median(vals), 1),
+        "p25": p25,
+        "p75": p75,
+    }
+
+
+def _compute_intervention_markers(allowed_paths: dict[str, set[str]], models: list[str]) -> dict[str, dict]:
+    user_data = analyze_user_messages(allowed_paths)
+    per_model = user_data.get("per_model", {})
+    markers: dict[str, dict] = {}
+
+    def compute_rows(classes: dict[str, dict], num_sessions: int) -> dict[str, dict]:
+        rows: dict[str, dict] = {}
+        for macro in INTERVENTION_MACROS:
+            recs = []
+            for label in macro["members"]:
+                recs.extend(classes.get(label, {}).get("messages", []))
+            firsts_by_path: dict[str, float] = {}
+            for rec in sorted(recs, key=lambda r: (r["path"], r["message_index"], r["progress_pct"])):
+                firsts_by_path.setdefault(rec["path"], rec["progress_pct"])
+            summary = _summarize_positions(list(firsts_by_path.values()))
+            rows[macro["key"]] = {
+                "label": macro["label"],
+                "symbol": macro["symbol"],
+                "color": macro["color"],
+                "median": summary["median"],
+                "p25": summary["p25"],
+                "p75": summary["p75"],
+                "session_count": len(firsts_by_path),
+                "session_pct": round(len(firsts_by_path) / num_sessions * 100, 1) if num_sessions else 0.0,
+            }
+        return rows
+
+    overall_classes = {label: user_data.get("overall", {}).get(label, {}) for label in user_data.get("class_order", [])}
+    markers["__all__"] = compute_rows(overall_classes, user_data.get("total_sessions", 0))
+
+    for model in models:
+        pdata = per_model.get(model, {})
+        classes = pdata.get("classes", {})
+        markers[model] = compute_rows(classes, pdata.get("num_sessions", 0))
+    return markers
+
+
+def _build_last_edit_marker(file_results: list, *, label: str | None = None) -> dict:
+    vals = [fr.positions["last_edit"] for fr in file_results if fr.positions.get("last_edit") is not None]
+    summary = _summarize_positions(vals)
+    return {
+        "key": LAST_EDIT_MARKER["key"],
+        "label": label or LAST_EDIT_MARKER["label"],
+        "symbol": LAST_EDIT_MARKER["symbol"],
+        "color": LAST_EDIT_MARKER["color"],
+        "median": summary["median"],
+        "p25": summary["p25"],
+        "p75": summary["p75"],
+    }
+
+
+def _build_combined_pi_summary(results: dict[str, list], raw_counts: dict[str, int]) -> dict:
+    combined_results = [fr for rows in results.values() for fr in rows]
+    key = "all-models-combined"
+    phase = pi_phase_profiles({key: combined_results}).get(key, {}) if combined_results else {}
+    n = len(combined_results)
+    return {
+        "label": "All models combined",
+        "avg_phase": phase,
+        "last_edit_marker": _build_last_edit_marker(combined_results),
+        "resolve_rate": round(sum(1 for fr in combined_results if fr.completed) / n * 100, 1) if n else 0.0,
+        "num_trajs": n,
+        "raw_single_model_count": sum(raw_counts.values()),
+    }
+
+
+def _build_combined_benchmark_summary(results: dict[str, list]) -> dict:
+    combined_results = [fr for rows in results.values() for fr in rows]
+    key = "all-models-combined"
+    phase = benchmark_phase_profiles({key: combined_results}).get(key, {}) if combined_results else {}
+    n = len(combined_results)
+    return {
+        "label": "All benchmark models combined",
+        "avg_phase": phase,
+        "last_edit_marker": _build_last_edit_marker(combined_results),
+        "resolve_rate": round(sum(1 for fr in combined_results if fr.resolved) / n * 100, 1) if n else 0.0,
+        "num_trajs": n,
+    }
+
+
+def _parse_merge_specs(specs: list[str] | None) -> list[dict]:
+    """Parse ``--merge-models`` flags of the form ``SRC1,SRC2=KEY:LABEL``."""
+    out: list[dict] = []
+    for spec in specs or []:
+        if "=" not in spec:
+            raise ValueError(f"invalid --merge-models spec (missing '='): {spec!r}")
+        src_side, dst_side = spec.split("=", 1)
+        sources = [s.strip() for s in src_side.split(",") if s.strip()]
+        if ":" in dst_side:
+            key, label = dst_side.split(":", 1)
+        else:
+            key, label = dst_side, dst_side
+        out.append({"sources": sources, "key": key.strip(), "label": label.strip()})
+    return out
+
+
+def _apply_model_merges(
+    merges: list[dict],
+    results: dict[str, list],
+    allowed_paths: dict[str, set[str]],
+    raw_counts,
+) -> None:
+    """Merge multiple input model keys into a single synthetic key in place."""
+    for merge in merges:
+        key = merge["key"]
+        merged_results: list = []
+        merged_paths: set[str] = set()
+        merged_count = 0
+        for src in merge["sources"]:
+            merged_results.extend(results.pop(src, []))
+            merged_paths.update(allowed_paths.pop(src, set()))
+            merged_count += raw_counts.pop(src, 0)
+        if merged_results:
+            results[key] = merged_results
+        if merged_paths:
+            allowed_paths[key] = merged_paths
+        if merged_count:
+            raw_counts[key] = merged_count
+
+        # Wire the merged key into the benchmark pair map if all sources agree.
+        src_benchmarks = {
+            BENCHMARK_PAIR_FOR_PI_MODEL[s]
+            for s in merge["sources"]
+            if s in BENCHMARK_PAIR_FOR_PI_MODEL
+        }
+        if len(src_benchmarks) == 1:
+            BENCHMARK_PAIR_FOR_PI_MODEL[key] = next(iter(src_benchmarks))
+
+
 def build_payload(
     data_root: Path,
     models: list[str] | None = None,
     session_name_prefixes: list[str] | None = None,
+    benchmark_data_root: Path | None = None,
+    merge_specs: list[dict] | None = None,
 ) -> dict:
     chosen_models = models or list(DEFAULT_EXACT_MODELS)
     session_filter = SessionFilter(
@@ -57,14 +248,65 @@ def build_payload(
         raw_n = raw_counts.get(model, 0)
         analyzed_n = len(results.get(model, []))
         print(f"  {model}: {raw_n} strict single-model sessions, {analyzed_n} analyzed")
+
+    merges = merge_specs or []
+    if merges:
+        _apply_model_merges(merges, results, allowed_paths, raw_counts)
+        for merge in merges:
+            key = merge["key"]
+            raw_n = raw_counts.get(key, 0)
+            analyzed_n = len(results.get(key, []))
+            print(f"  → merged {'+'.join(merge['sources'])} as {key}: "
+                  f"{raw_n} sessions, {analyzed_n} analyzed")
+
+    present_keys = list({*chosen_models, *(m["key"] for m in merges)})
     sorted_models = sorted(
-        [m for m in chosen_models if raw_counts.get(m, 0) > 0],
+        [m for m in present_keys if raw_counts.get(m, 0) > 0],
         key=lambda m: (-raw_counts.get(m, 0), -len(results.get(m, [])), m),
     )
     payload = build_analytics_payload(results)
+    for merge in merges:
+        if merge["key"] in payload.get("model_display_names", {}):
+            payload["model_display_names"][merge["key"]] = merge["label"]
     payload["raw_single_model_counts"] = {m: raw_counts.get(m, 0) for m in sorted_models}
     payload["analyzed_counts"] = {m: len(results.get(m, [])) for m in sorted_models}
     payload["models"] = sorted_models
+    payload["intervention_markers"] = _compute_intervention_markers(allowed_paths, sorted_models)
+    payload["last_edit_markers"] = {m: _build_last_edit_marker(results.get(m, [])) for m in sorted_models}
+    payload["combined"] = _build_combined_pi_summary(results, {m: raw_counts.get(m, 0) for m in sorted_models})
+
+    benchmark_root = benchmark_data_root or Path("data")
+    benchmark_models = sorted({BENCHMARK_PAIR_FOR_PI_MODEL[m] for m in sorted_models if m in BENCHMARK_PAIR_FOR_PI_MODEL})
+    if benchmark_models:
+        benchmark_results = process_benchmark_all(benchmark_root, models=benchmark_models)
+        benchmark_payload = build_benchmark_payload(benchmark_results)
+        payload["benchmark"] = {
+            "pair_for_pi_model": {m: BENCHMARK_PAIR_FOR_PI_MODEL[m] for m in sorted_models if m in BENCHMARK_PAIR_FOR_PI_MODEL},
+            "avg_phase": benchmark_payload["avg_phase"],
+            "median_last_edit": benchmark_payload["median_last_edit"],
+            "last_edit_markers": {m: _build_last_edit_marker(benchmark_results.get(m, [])) for m in benchmark_models},
+            "resolve_rate": benchmark_payload["resolve_rate"],
+            "model_display_names": benchmark_payload["model_display_names"],
+            "num_trajs": benchmark_payload["num_trajs"],
+            "combined": _build_combined_benchmark_summary(benchmark_results),
+        }
+    else:
+        payload["benchmark"] = {
+            "pair_for_pi_model": {},
+            "avg_phase": {},
+            "median_last_edit": {},
+            "last_edit_markers": {},
+            "resolve_rate": {},
+            "model_display_names": {},
+            "num_trajs": {},
+            "combined": {
+                "label": "All benchmark models combined",
+                "avg_phase": {},
+                "last_edit_marker": _build_last_edit_marker([]),
+                "resolve_rate": 0.0,
+                "num_trajs": 0,
+            },
+        }
     return payload
 
 
@@ -165,6 +407,17 @@ def render_html(payload: dict) -> str:
     #stackedPanels .chart-wrapper {{
       padding: 4px 0;
       margin-bottom: 0;
+    }}
+    .stacked-pair-row {{
+      margin: 6px 0 12px 0;
+    }}
+    .stacked-pair-row .side-label {{
+      margin-bottom: 4px;
+    }}
+    .stacked-pair-row .panel-subhead {{
+      font-size: 11px;
+      color: var(--muted);
+      padding-left: 8px;
     }}
 
     /* Dumbbell chart */
@@ -365,7 +618,7 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>2. Intent Comparison</h2>
-  <p class="chart-desc">Frequency per 100 steps, compared across all models.</p>
+  <p class="chart-desc">Frequency per 100 steps, compared across all models. For Pi, the git rows use a more semantic sub-taxonomy: GitHub context, repo inspection, diff review, sync/integrate, local state change, and publish.</p>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
@@ -378,7 +631,8 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>4. Typical Trajectory Shape</h2>
-  <p class="chart-desc">Stacked area chart: how the mix of actions evolves from start to end of the average trajectory. Panels ordered by resolve rate (descending).</p>
+  <p class="chart-desc">Each model is shown as a pair: benchmark (agent alone) above, maintainer-guided Pi sessions below. Markers are median-only, with no bands: △ = authorization, ○ = steering, □ = closeout, ◇ = last edit.</p>
+  <p class="chart-desc">Where a direct public benchmark run is unavailable in this repo, the benchmark row uses the closest family baseline we do have: GPT-5 for the <code>gpt-5.*</code> models and Sonnet 4.5 for the <code>claude-opus-4-*</code> models.</p>
   <div id="stackedPanels"></div>
 
 
@@ -432,6 +686,11 @@ const GLM_COLOR = '#6a9a6a';
 const GEMINI_COLOR = '#9a6a9a';
 const MUTED = '#6b7280';
 const TEXT = '#1a1a1a';
+
+function fmtPct(v) {{
+  if (v == null || Number.isNaN(v)) return '—';
+  return Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+}}
 
 // Names for display (everywhere except transition matrices)
 const CATEGORY_NAMES = ['read','search','reproduce','edit','verify','git','housekeeping'];
@@ -589,7 +848,7 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
     }}
     const cat = catMap[intent] || '?';
     return {{ intent, vals, maxV, cat }};
-  }}).filter(r => r.maxV > 1.5);
+  }});
 
   {{
 
@@ -826,15 +1085,16 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   }}
 }})();
 
-// 6. Stacked area charts — 6 grouped bands, inline labels
-function drawStackedArea(canvasId, model, annotations, markers) {{
+// 6. Stacked area charts — paired benchmark vs maintainer-guided panels
+function drawStackedArea(canvasId, phaseData, opts = {{}}) {{
+  const markers = opts.markers || [];
+  const showMarkers = markers.length > 0;
   const {{ ctx, w, h }} = getCtx(canvasId);
-  const left = 40, right = 130, top = 22, bot = 10;
+  const left = 40, right = 18, top = 22, bot = showMarkers ? 28 : 12;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
 
-  // 6 grouped bands: understand (R+S), reproduce (P), edit (E), verify (V), git (G), housekeeping (H)
   const groups = [
     {{ name: 'understand',   letters: ['R','S'], color: '#5a7d9a' }},
     {{ name: 'reproduce',    letters: ['P'],     color: '#b0956a' }},
@@ -844,17 +1104,18 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
     {{ name: 'housekeeping', letters: ['H'],     color: '#7a9a52' }},
   ];
 
-  // Sum letters per group per bin
+  const xPct = pct => left + (pct / 100) * plotW;
+  const xAtBin = i => left + (i / (bins - 1)) * plotW;
+
   const groupVals = groups.map(g => {{
     const summed = new Array(bins).fill(0);
     for (const l of g.letters) {{
-      const vals = D.avg_phase[model][l];
-      if (vals) for (let b = 0; b < bins; b++) summed[b] += vals[b];
+      const vals = phaseData?.[l] || [];
+      for (let b = 0; b < bins; b++) summed[b] += vals[b] || 0;
     }}
     return summed;
   }});
 
-  // Build stacked layers
   const stacked = [];
   let cumulative = new Array(bins).fill(0);
   for (let gi = 0; gi < groups.length; gi++) {{
@@ -862,50 +1123,45 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
     stacked.push({{ group: groups[gi], bottom: [...cumulative], top: layer }});
     cumulative = layer;
   }}
-
   const maxes = cumulative;
 
-  function xAt(i) {{ return left + (i / (bins - 1)) * plotW; }}
   function yAt(v, binIdx) {{
     const norm = maxes[binIdx] > 0 ? v / maxes[binIdx] : 0;
     return top + plotH - norm * plotH;
   }}
 
-  // Draw from top layer down (so bottom layers paint over top)
   for (let s = stacked.length - 1; s >= 0; s--) {{
     const layer = stacked[s];
     ctx.fillStyle = layer.group.color;
     ctx.globalAlpha = 0.85;
     ctx.beginPath();
     for (let i = 0; i < bins; i++) {{
-      const x = xAt(i), y = yAt(layer.top[i], i);
+      const x = xAtBin(i), y = yAt(layer.top[i], i);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }}
     for (let i = bins - 1; i >= 0; i--) {{
-      ctx.lineTo(xAt(i), yAt(layer.bottom[i], i));
+      ctx.lineTo(xAtBin(i), yAt(layer.bottom[i], i));
     }}
     ctx.closePath();
     ctx.fill();
   }}
   ctx.globalAlpha = 1;
 
-  // X-axis ticks and labels ABOVE the chart
-  ctx.fillStyle = MUTED; ctx.font = '9px Palatino, Georgia, serif'; ctx.textAlign = 'center';
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5;
-  for (let i = 0; i < bins; i++) {{
-    if (i % 5 === 0) {{
-      const x = xAt(i);
-      ctx.fillText(i * 5 + '%', x, top - 8);
-      // Small tick down into chart
-      ctx.beginPath();
-      ctx.moveTo(x, top - 3);
-      ctx.lineTo(x, top + 4);
-      ctx.stroke();
-    }}
+  ctx.fillStyle = MUTED;
+  ctx.font = '9px Palatino, Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 0.5;
+  for (const pct of [0, 25, 50, 75, 100]) {{
+    const x = xPct(pct);
+    ctx.fillText(`${{pct}}%`, x, top - 8);
+    ctx.beginPath();
+    ctx.moveTo(x, top - 3);
+    ctx.lineTo(x, top + 4);
+    ctx.stroke();
   }}
 
-  // 50% vertical reference line (dashed, subtle — keep below the marker line)
-  const halfX = xAt(10);
+  const halfX = xPct(50);
   ctx.strokeStyle = 'rgba(0,0,0,0.07)';
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
@@ -915,37 +1171,43 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Vertical marker line for last code change — medium charcoal, thin, opaque.
-  // No axis label; right-margin annotation describes it instead.
-  if (markers) {{
-    for (const m of markers) {{
-      const mx = xAt(m.at / 5);
-      ctx.strokeStyle = MUTED;
-      ctx.lineWidth = 1;
+  ctx.strokeStyle = '#cfcfcf';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(left, top + plotH);
+  ctx.lineTo(left + plotW, top + plotH);
+  ctx.stroke();
+
+  if (showMarkers) {{
+    for (const marker of markers) {{
+      if (marker?.median == null) continue;
+      const xm = xPct(marker.median);
+      ctx.strokeStyle = marker.color;
+      ctx.lineWidth = marker.key === 'last_edit' ? 1.0 : 1.2;
       ctx.beginPath();
-      ctx.moveTo(mx, top);
-      ctx.lineTo(mx, top + plotH);
+      ctx.moveTo(xm, top);
+      ctx.lineTo(xm, top + plotH);
       ctx.stroke();
     }}
 
-    // Right-margin annotation: two italic muted lines describing the marker.
-    const m0 = markers[0];
-    if (m0 != null) {{
-      const post = 100 - m0.at;
-      ctx.fillStyle = MUTED;
-      ctx.font = 'italic 11px Palatino, Georgia, serif';
-      ctx.textAlign = 'left';
-      const ax = left + plotW + 12;
-      const ay = top + plotH / 2;
-      ctx.fillText(`last edit at ${{m0.at}}%`, ax, ay - 4);
-      ctx.fillText(`${{post}}% post-edit`, ax, ay + 12);
+    const placed = [];
+    for (const marker of markers) {{
+      if (marker?.median == null) continue;
+      const xm = xPct(marker.median);
+      let y = top + plotH + 13;
+      for (const prev of placed) {{
+        if (Math.abs(prev.x - xm) < 16 && Math.abs(prev.y - y) < 8) y += 10;
+      }}
+      placed.push({{ x: xm, y }});
+      ctx.fillStyle = marker.color;
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(marker.symbol, xm, y);
     }}
   }}
 
-  // Inline band labels: place name inside band, avoiding edges
   for (let s = 0; s < stacked.length; s++) {{
     const layer = stacked[s];
-    // Search for thickest bin within the middle range (bins 2 to bins-3) to avoid edge clipping
     const searchFrom = 2;
     const searchTo = bins - 3;
     let bestBin = Math.floor(bins / 2), bestH = 0;
@@ -953,13 +1215,13 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
       const h = Math.abs(yAt(layer.bottom[i], i) - yAt(layer.top[i], i));
       if (h > bestH) {{ bestH = h; bestBin = i; }}
     }}
-    if (bestH < 16) continue; // too thin to label
+    if (bestH < 16) continue;
     const midY = (yAt(layer.top[bestBin], bestBin) + yAt(layer.bottom[bestBin], bestBin)) / 2;
     ctx.fillStyle = '#fff';
     ctx.globalAlpha = 0.85;
     ctx.font = '10px Palatino, Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText(layer.group.name, xAt(bestBin), midY + 4);
+    ctx.fillText(layer.group.name, xAtBin(bestBin), midY + 4);
     ctx.globalAlpha = 1;
   }}
 }}
@@ -967,26 +1229,63 @@ function drawStackedArea(canvasId, model, annotations, markers) {{
 (function() {{
   const container = document.getElementById('stackedPanels');
   if (!container) return;
-  for (const m of ALL_MODELS) {{
+  const interventionOrder = ['authorization', 'steering', 'closeout'];
+  const stackedScopes = ['__all__', ...ALL_MODELS];
+
+  for (const m of stackedScopes) {{
+    const isCombined = m === '__all__';
     const wrap = document.createElement('div');
     wrap.className = 'chart-wrapper';
-    const cls = tagClass[m] || '';
-    const rr = D.resolve_rate[m];
-    const rawN = D.raw_single_model_counts?.[m] ?? 0;
-    const analyzedN = D.analyzed_counts?.[m] ?? D.num_trajs[m] ?? 0;
-    const sub = rr != null
-      ? `<span class="panel-subhead">${{rawN}} single-model sessions · ${{analyzedN}} analyzed · ${{rr.toFixed(1)}}% completed cleanly</span>`
-      : `<span class="panel-subhead">${{rawN}} single-model sessions · ${{analyzedN}} analyzed</span>`;
+    const cls = isCombined ? '' : (tagClass[m] || '');
+    const title = isCombined ? (D.combined?.label || 'All models combined') : MODEL_NAMES[m];
+    const guidedRate = isCombined ? D.combined?.resolve_rate : D.resolve_rate[m];
+    const rawN = isCombined ? (D.combined?.raw_single_model_count ?? 0) : (D.raw_single_model_counts?.[m] ?? 0);
+    const analyzedN = isCombined ? (D.combined?.num_trajs ?? 0) : (D.analyzed_counts?.[m] ?? D.num_trajs[m] ?? 0);
+    const benchmarkModel = isCombined ? '__all__' : (D.benchmark?.pair_for_pi_model?.[m] || null);
+    const benchmarkRate = isCombined ? D.benchmark?.combined?.resolve_rate : (benchmarkModel ? D.benchmark?.resolve_rate?.[benchmarkModel] : null);
+    const benchmarkN = isCombined ? D.benchmark?.combined?.num_trajs : (benchmarkModel ? D.benchmark?.num_trajs?.[benchmarkModel] : null);
+    const benchmarkName = isCombined
+      ? (D.benchmark?.combined?.label || 'All benchmark models combined')
+      : (benchmarkModel ? D.benchmark?.model_display_names?.[benchmarkModel] || benchmarkModel : null);
+
+    const benchmarkSub = benchmarkModel && benchmarkRate != null
+      ? `${{benchmarkN}} trajectories · ${{benchmarkRate.toFixed(1)}}% resolved · ${{benchmarkName}}`
+      : 'benchmark baseline unavailable';
+    const guidedSub = guidedRate != null
+      ? `${{rawN}} single-model sessions · ${{analyzedN}} analyzed · ${{guidedRate.toFixed(1)}}% completed cleanly`
+      : `${{rawN}} single-model sessions · ${{analyzedN}} analyzed`;
+
     wrap.innerHTML =
       `<div class="stacked-panel-header">` +
-        `<span class="model-tag ${{cls}}">${{MODEL_NAMES[m]}}</span>` +
-        sub +
+        `<span class="model-tag ${{cls}}">${{title}}</span>` +
       `</div>` +
-      `<canvas id="stacked_${{m}}" height="150"></canvas>`;
+      `<div class="stacked-pair-row">` +
+        `<div class="side-label">benchmark (agent alone)<span class="panel-subhead">${{benchmarkSub}}</span></div>` +
+        `<canvas id="stacked_benchmark_${{m}}" height="138"></canvas>` +
+      `</div>` +
+      `<div class="stacked-pair-row">` +
+        `<div class="side-label">maintainer-guided<span class="panel-subhead">${{guidedSub}}</span></div>` +
+        `<canvas id="stacked_guided_${{m}}" height="152"></canvas>` +
+      `</div>`;
     container.appendChild(wrap);
-    const mle = D.median_last_edit[m];
-    const markers = mle != null ? [{{ at: mle }}] : null;
-    drawStackedArea(`stacked_${{m}}`, m, null, markers);
+
+    const benchmarkPhase = isCombined ? D.benchmark?.combined?.avg_phase : D.benchmark?.avg_phase?.[benchmarkModel];
+    const benchmarkLastEditMarker = isCombined
+      ? D.benchmark?.combined?.last_edit_marker
+      : D.benchmark?.last_edit_markers?.[benchmarkModel];
+    if (benchmarkPhase) {{
+      drawStackedArea(`stacked_benchmark_${{m}}`, benchmarkPhase, {{
+        markers: benchmarkLastEditMarker ? [benchmarkLastEditMarker] : [],
+      }});
+    }}
+
+    const interventions = interventionOrder
+      .map(key => D.intervention_markers?.[isCombined ? '__all__' : m]?.[key])
+      .filter(Boolean);
+    const guidedLastEditMarker = isCombined ? D.combined?.last_edit_marker : D.last_edit_markers?.[m];
+    drawStackedArea(`stacked_guided_${{m}}`, isCombined ? D.combined?.avg_phase : D.avg_phase[m], {{
+      markers: [...interventions, ...(guidedLastEditMarker ? [guidedLastEditMarker] : [])],
+    }});
   }}
 }})();
 
@@ -1006,14 +1305,28 @@ def main() -> None:
         default=["Issue:"],
         help="Keep only sessions whose final non-empty session_info.name starts with this prefix. Repeatable.",
     )
+    parser.add_argument("--benchmark-data-root", default="data")
     parser.add_argument("--output", "-o", default="docs/pi-analytics.html")
+    parser.add_argument(
+        "--merge-models",
+        action="append",
+        default=[],
+        help=(
+            "Merge several input model keys into one synthetic key for the "
+            "trajectory-shape panels. Format: SRC1,SRC2=KEY:LABEL. Repeatable."
+        ),
+    )
     args = parser.parse_args()
+
+    merge_specs = _parse_merge_specs(args.merge_models)
 
     data_root = Path(args.data_root)
     payload = build_payload(
         data_root,
         models=args.models,
         session_name_prefixes=args.session_name_prefix,
+        benchmark_data_root=Path(args.benchmark_data_root),
+        merge_specs=merge_specs,
     )
     html = render_html(payload)
 

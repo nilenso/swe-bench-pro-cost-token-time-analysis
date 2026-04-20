@@ -11,6 +11,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import html
+import json
 import statistics
 import sys
 from collections import Counter
@@ -19,7 +21,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analysis.orchestrate import process_all
-from analysis.models import MODELS, INTENT_TO_HIGH_LEVEL
+from analysis.models import (
+    MODELS,
+    INTENT_TO_HIGH_LEVEL,
+    INTENT_DESCRIPTIONS,
+    HIGH_LEVEL_COLORS,
+)
+from analysis.failure_modes import FAMILY_COLOR
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -794,6 +802,194 @@ def render_verify_sections(results, models) -> list[tuple[str, str, str]]:
     return sections
 
 
+def render_failure_sections(failure_data, models) -> list[tuple[str, str, str]]:
+    if not failure_data:
+        return []
+
+    per_model = failure_data.get("per_model", {})
+    models = [m for m in models if m in per_model]
+    if not models:
+        return []
+
+    mode_meta = {m["key"]: m for m in failure_data.get("modes", [])}
+    family_order = ["tool", "code", "test"]
+    family_label = {
+        "tool": "tool",
+        "code": "code",
+        "test": "test",
+    }
+
+    family_counts = {}
+    for model in models:
+        counts = {fam: 0 for fam in family_order}
+        for mode, n in per_model[model].get("mode_counts", {}).items():
+            fam = mode_meta.get(mode, {}).get("family", "tool")
+            counts[fam] = counts.get(fam, 0) + n
+        family_counts[model] = counts
+
+    max_rate = max(
+        (per_model[m]["n_failures"] / max(per_model[m]["n_steps"], 1))
+        for m in models
+    )
+
+    bar_width = 560
+    bar_html = '<div style="margin:16px 0 20px 0">'
+    bar_html += (
+        '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;'
+        'font-size:11.5px;color:#666">'
+    )
+    for fam in family_order:
+        bar_html += (
+            f'<span style="display:inline-flex;align-items:center;gap:5px">'
+            f'<span style="display:inline-block;width:10px;height:10px;'
+            f'background:{FAMILY_COLOR[fam]};border-radius:2px"></span>'
+            f'{family_label[fam]} failures</span>'
+        )
+    bar_html += '</div>'
+
+    for model in models:
+        pm = per_model[model]
+        total_steps = max(pm["n_steps"], 1)
+        rate = pm["n_failures"] / total_steps
+        tool_share = family_counts[model]["tool"] / max(pm["n_failures"], 1) * 100
+        bar_html += (
+            f'<div style="display:grid;grid-template-columns:110px {bar_width}px 1fr;'
+            f'align-items:center;gap:10px;margin-bottom:8px">'
+            f'<div style="text-align:right;font-size:12px;color:{_model_color(model)};'
+            f'font-style:italic">{_model_label(model)}</div>'
+            f'<div style="height:18px;border:1px solid #e4e0d8;background:#faf8f0;'
+            f'border-radius:3px;overflow:hidden;display:flex">'
+        )
+        for fam in family_order:
+            fam_rate = family_counts[model][fam] / total_steps
+            width = fam_rate / max_rate * 100 if max_rate > 0 else 0
+            bar_html += (
+                f'<div style="width:{width:.2f}%;background:{FAMILY_COLOR[fam]}" '
+                f'title="{family_label[fam]}: {family_counts[model][fam]} '
+                f'({fam_rate*100:.1f}% of all steps)"></div>'
+            )
+        bar_html += '</div>'
+        bar_html += (
+            f'<div style="font-size:11px;color:#666">'
+            f'{rate*100:.1f}% of steps flagged as failures'
+            f' &middot; {tool_share:.1f}% tool friction</div></div>'
+        )
+    bar_html += '</div>'
+
+    gpt_counts = per_model.get("gpt5", {}).get("mode_counts", {})
+    gpt_total = per_model.get("gpt5", {}).get("n_failures", 0)
+    gpt_steps = per_model.get("gpt5", {}).get("n_steps", 1)
+    gpt_tool_share = family_counts.get("gpt5", {}).get("tool", 0) / max(gpt_total, 1) * 100
+    gpt_wrapper_modes = [
+        "apply_patch_cmd_not_found",
+        "apply_patch_shell_syntax",
+        "apply_patch_other",
+        "bash_trailing_brace",
+        "bash_quote_nesting",
+        "bash_heredoc_unterminated",
+        "bash_syntax_error",
+        "bash_broken_pipe",
+    ]
+    gpt_wrapper_total = sum(gpt_counts.get(k, 0) for k in gpt_wrapper_modes)
+    sec_phenom = (
+        '<p style="font-style:italic;color:#555;margin:0 0 14px 0">'
+        f'GPT-5 records a {gpt_total / max(gpt_steps, 1) * 100:.1f}% failure-step rate. '
+        f'{gpt_tool_share:.1f}% of its failures are tool-call friction, and '
+        f'{gpt_wrapper_total / max(gpt_total, 1) * 100:.1f}% come from one shell-wrapper/apply_patch cluster '
+        '(applypatch hallucination, trailing <code>}</code>, heredoc breakage, '
+        'generic bash syntax, and the broken pipes they trigger).</p>'
+    )
+
+    sorted_modes = sorted(
+        mode_meta,
+        key=lambda k: (
+            per_model.get("gpt5", {}).get("mode_counts", {}).get(k, 0),
+            sum(per_model[m].get("mode_counts", {}).get(k, 0) for m in models),
+        ),
+        reverse=True,
+    )
+    headers = [
+        "mode",
+        "family",
+        *[_model_label(m) for m in models],
+        "GPT share",
+        "GPT trajs",
+    ]
+    rows = []
+    for mode in sorted_modes:
+        meta = mode_meta[mode]
+        gpt_count = per_model.get("gpt5", {}).get("mode_counts", {}).get(mode, 0)
+        gpt_share = gpt_count / max(gpt_total, 1) * 100
+        gpt_trajs = per_model.get("gpt5", {}).get("trajectories_with_mode", {}).get(mode, 0)
+        rows.append([
+            (
+                f'<div>{html.escape(meta["label"])}</div>'
+                f'<div style="font-size:11px;color:#888"><code>{html.escape(mode)}</code></div>'
+            ),
+            meta["family"],
+            *[per_model[m].get("mode_counts", {}).get(mode, 0) for m in models],
+            f'{gpt_share:.1f}%',
+            gpt_trajs,
+        ])
+
+    def _clip(text: str, n: int) -> str:
+        text = (text or "").strip()
+        return text if len(text) <= n else text[: n - 1] + "…"
+
+    sample_modes = [
+        "bash_broken_pipe",
+        "bash_trailing_brace",
+        "apply_patch_cmd_not_found",
+        "bash_heredoc_unterminated",
+        "strep_invalid_range",
+    ]
+    sample_html = '<div style="margin:18px 0 0 0">'
+    sample_html += '<h3 style="font-size:14px;font-style:italic;font-weight:400;margin:0 0 10px 0">Illustrative GPT-5 failures</h3>'
+    for mode in sample_modes:
+        samples = per_model.get("gpt5", {}).get("samples", {}).get(mode, [])
+        if not samples:
+            continue
+        sample = samples[0]
+        meta = mode_meta[mode]
+        count = gpt_counts.get(mode, 0)
+        sample_html += (
+            '<div style="margin:0 0 14px 0;padding:10px 12px;border-left:3px solid '
+            f'{FAMILY_COLOR.get(meta["family"], "#999")};background:#fcfbf6">'
+            f'<div style="font-size:12.5px;color:#444;margin-bottom:5px">'
+            f'<strong>{html.escape(meta["label"])}</strong> '
+            f'<span style="color:#888">({count} GPT-5 steps)</span></div>'
+            f'<div style="font-size:11.5px;color:#666;margin-bottom:6px">{html.escape(meta["desc"])}</div>'
+            f'<div style="font-size:11px;color:#888;margin-bottom:4px">{html.escape(sample["instance"])}</div>'
+            f'<pre style="margin:0 0 6px 0;padding:8px;background:#fffffb;border:1px solid #ece7da;white-space:pre-wrap;overflow-x:auto;font-size:11px"><strong>action</strong>\n{html.escape(_clip(sample.get("action", ""), 320))}</pre>'
+            f'<pre style="margin:0;padding:8px;background:#fffffb;border:1px solid #ece7da;white-space:pre-wrap;overflow-x:auto;font-size:11px"><strong>observation</strong>\n{html.escape(_clip(sample.get("observation", ""), 420))}</pre>'
+            '</div>'
+        )
+    sample_html += '</div>'
+
+    notes = (
+        '<p>This section uses <code>data/failure_modes.json</code>, produced by '
+        '<code>scripts/build_failure_modes.py</code>. Each trajectory step is classified as '
+        'either not-a-failure or one failure mode.</p>'
+        '<p><strong>Counts are step counts</strong>, not unique incidents. A single trajectory '
+        'can contribute many failure steps, and one underlying shell mistake can fan out into '
+        'multiple observed failures.</p>'
+        '<p><strong>Families</strong>: <em>tool</em> means the harness/tool call itself failed; '
+        '<em>code</em> means the agent ran code that crashed; <em>test</em> means a test runner '
+        'reported failures.</p>'
+        '<p><strong>Interpretation caveat</strong>: <code>bash_broken_pipe</code> is often a '
+        'secondary symptom. In GPT-5, many of those steps are downstream of the same wrapper '
+        'pathologies that also produce trailing-brace, heredoc, or quoting failures.</p>'
+        '<p>The distinctive GPT-5 signature is not ordinary test failure. It is repeated '
+        'interaction friction around shell wrapping and hallucinated <code>applypatch</code> usage.</p>'
+    )
+
+    return [(
+        "<h2>8b. Failure Modes</h2>",
+        sec_phenom + bar_html + _html_table(headers, rows) + sample_html,
+        notes,
+    )]
+
+
 def _lerp_color(hex_color: str, t: float) -> str:
     """Blend between #fffff8 (page bg) and hex_color. t=0 → bg, t=1 → full color."""
     bg = (255, 255, 248)
@@ -1210,6 +1406,248 @@ def _paired_bar_chart(intents_pct, models, top_n=10):
     )
     legend = f'<div style="margin:2px 0 8px 138px">{legend_items}</div>'
     return f'<div style="margin:12px 0 16px 0;max-width:700px">{legend}{"".join(rows_html)}</div>'
+
+
+# ── Intent Classification Taxonomy ─────────────────────────
+#
+# For each base intent we describe (a) what it means and (b) the literal rule
+# in classify_intent.py that decides the label. The rule text is intentionally
+# a tight English paraphrase of the pseudocode in
+# docs/intent-classification-rules.md -- it should be possible to read the
+# table and match a step's action string to a label without looking at the
+# code.
+
+_TAXONOMY_RULES: dict[str, str] = {
+    # read
+    "read-file-full":            "str_replace_editor view &lt;file&gt; (fallback once test, config, range, and truncated views are ruled out)",
+    "read-file-range":           "str_replace_editor view with <code>--view_range</code>",
+    "read-file-full(truncated)": "str_replace_editor view where the observation contains <code>too large to display</code>",
+    "read-test-file":            "str_replace_editor view on a filename matching <code>test_*</code>, <code>*_test.*</code>, or <code>conftest*</code>",
+    "read-config-file":          "str_replace_editor view on <code>package.json</code>, <code>pytest.ini</code>, <code>setup.cfg</code>, <code>setup.py</code>, <code>go.mod</code>, <code>Makefile</code>, <code>config.json</code>",
+    "read-via-bash":             "<code>cat</code>, <code>head</code>, <code>tail</code>, <code>sed -n</code>, <code>nl</code>, <code>awk</code>",
+    # search
+    "view-directory":            "str_replace_editor view where path has no extension, or observation lists &ldquo;files and directories&rdquo;",
+    "list-directory":            "<code>ls</code>, <code>tree</code>, <code>pwd</code>",
+    "search-keyword":            "<code>grep</code>, <code>rg</code>, <code>ag</code>",
+    "search-files-by-name":      "<code>find ... -name</code> with no grep/xargs pipe",
+    "search-files-by-content":   "<code>find ... -exec grep</code> or <code>find ... | xargs grep</code>",
+    "inspect-file-metadata":     "<code>wc</code>, <code>file</code>, <code>stat</code>",
+    # reproduce
+    "create-repro-script":       "str_replace_editor create on a filename containing <code>repro</code>, <code>reproduce</code>, or <code>demo</code>",
+    "run-repro-script":          "run a named script whose basename matches <code>repro*</code> or <code>reproduce*</code> (python, node, sh, bash, go run)",
+    "run-inline-snippet":        "<code>python -c</code>, <code>python - &lt;&lt;</code>, <code>node -e</code> &mdash; residual when no inline sub-pattern matches",
+    # inline snippet sub-intents
+    "run-inline-verify":         "inline snippet with <code>import/from</code> + <code>assert</code>/<code>print</code> (smoke test or assertion)",
+    "read-via-inline-script":    "inline snippet that reads a file (<code>.read()</code>, <code>open(...,'r')</code>, <code>readFileSync</code>) and prints, without writing",
+    "edit-via-inline-script":    "inline snippet that writes (<code>.write()</code>, <code>writeFileSync</code>) together with reading or <code>.replace()</code>/<code>re.sub()</code>",
+    "create-file-via-inline-script": "inline snippet that writes a file with no prior read",
+    "check-version":             "inline snippet matching <code>--version</code>, <code>-V</code>, <code>sys.version</code>, or <code>node -v</code>",
+    # edit
+    "edit-source":               "str_replace_editor str_replace on a filename <em>not</em> matching test/repro/verify/check",
+    "insert-source":             "str_replace_editor insert",
+    "apply-patch":               "<code>applypatch</code> command (GPT-specific)",
+    "create-file":               "str_replace_editor create on a filename <em>not</em> matching repro/test/verify/doc patterns",
+    # verify
+    "run-test-suite":            "<code>pytest</code>, <code>go test</code>, <code>npm test</code>, <code>npx jest</code>, <code>mocha</code>, <code>yarn test</code>, <code>python -m unittest</code> (broad; no <code>::</code> or <code>-k</code>)",
+    "run-test-specific":         "a test runner command containing <code>::</code> or <code> -k </code>",
+    "create-test-script":        "str_replace_editor create on a filename matching <code>test_*</code>, <code>*test.py</code>, <code>*test.js</code>, <code>*test.go</code>",
+    "run-verify-script":         "run a named script whose basename contains <code>test_</code>, <code>verify</code>, <code>check</code>, <code>validate</code>, or <code>edge_case</code>",
+    "create-verify-script":      "str_replace_editor create on a filename matching <code>verify*</code>, <code>check*</code>, or <code>validate*</code>",
+    "edit-test-or-repro":        "str_replace_editor str_replace on a filename containing <code>test_</code>, <code>repro</code>, <code>verify</code>, or <code>check</code>",
+    "run-custom-script":         "run a named python/node/sh/bash/go script whose basename doesn&rsquo;t match repro/test/verify patterns",
+    "syntax-check":              "<code>py_compile</code>, <code>compileall</code>, <code>node -c</code>",
+    "compile-build":             "<code>go build</code>, <code>go vet</code>, <code>make</code>, <code>tsc</code>, <code>npx tsc</code>, <code>npm run build</code>, <code>yarn build</code>",
+    # git
+    "git-diff":                  "<code>git diff</code> (with or without <code>-C &lt;dir&gt;</code>)",
+    "git-status-log":            "<code>git status</code>, <code>git show</code>, <code>git log</code>",
+    "git-stash":                 "<code>git stash</code>",
+    # housekeeping
+    "file-cleanup":              "<code>rm</code>, <code>mv</code>, <code>cp</code>, <code>chmod</code>",
+    "create-documentation":      "str_replace_editor create on a filename matching <code>*summary*</code>, <code>*readme*</code>, <code>*changes*</code>, <code>*implementation*</code>",
+    "start-service":             "<code>redis-server</code>, <code>redis-cli</code>, <code>mongod</code>, <code>sleep</code>",
+    "install-deps":              "<code>pip install</code>, <code>pip list</code>, <code>npm install</code>, <code>go get</code>, <code>apt</code>",
+    "check-tool-exists":         "<code>which</code>, <code>type</code>",
+    # failed  (observation contains syntax error / command not found / etc.)
+    "search-keyword(failed)":    "<code>grep</code>/<code>find</code> whose observation contains a shell error",
+    "read-via-bash(failed)":     "<code>cat</code>/<code>head</code>/<code>sed</code>/<code>tail</code>/<code>ls</code> whose observation contains a shell error",
+    "run-script(failed)":        "<code>python</code>/<code>node</code> whose observation contains a shell error",
+    "run-test-suite(failed)":    "test runner whose observation contains a shell error",
+    "bash-command(failed)":      "any other bash command whose observation contains a shell error",
+    # other
+    "submit":                    "action&rsquo;s first line starts with <code>submit</code>",
+    "empty":                     "action string is blank (rate-limit or context-window exit)",
+    "echo":                      "<code>echo</code>, <code>printf</code>",
+    "bash-other":                "final fallback &mdash; bash command that matched no other rule (&lt;2% of steps by design)",
+    "undo-edit":                 "<code>str_replace_editor undo_edit</code>",
+}
+
+# Presentation order: high-level category, then the intents within it.
+_TAXONOMY_ORDER: list[tuple[str, list[str]]] = [
+    ("read", [
+        "read-file-full", "read-file-range", "read-file-full(truncated)",
+        "read-test-file", "read-config-file", "read-via-bash",
+        "read-via-inline-script",
+    ]),
+    ("search", [
+        "view-directory", "list-directory", "search-keyword",
+        "search-files-by-name", "search-files-by-content",
+        "inspect-file-metadata", "check-version",
+    ]),
+    ("reproduce", [
+        "create-repro-script", "run-repro-script", "run-inline-snippet",
+    ]),
+    ("edit", [
+        "edit-source", "insert-source", "apply-patch", "create-file",
+        "edit-via-inline-script", "create-file-via-inline-script",
+    ]),
+    ("verify", [
+        "run-test-suite", "run-test-specific", "create-test-script",
+        "run-verify-script", "create-verify-script", "edit-test-or-repro",
+        "run-custom-script", "syntax-check", "compile-build",
+        "run-inline-verify",
+    ]),
+    ("git", ["git-diff", "git-status-log", "git-stash"]),
+    ("housekeeping", [
+        "file-cleanup", "create-documentation", "start-service",
+        "install-deps", "check-tool-exists",
+    ]),
+    ("failed", [
+        "search-keyword(failed)", "read-via-bash(failed)",
+        "run-script(failed)", "run-test-suite(failed)",
+        "bash-command(failed)",
+    ]),
+    ("other", ["submit", "empty", "echo", "bash-other", "undo-edit"]),
+]
+
+
+def render_taxonomy_section(results, models) -> list[tuple[str, str, str]]:
+    """One Tufte-style table: high-level category &rarr; base intent &rarr; description &rarr; matching rule.
+
+    Also includes per-model step counts so the reader can see which intents actually fire.
+    """
+    # Aggregate counts per intent per model.
+    intent_totals: dict[str, dict[str, int]] = {i: {} for i in INTENT_TO_HIGH_LEVEL}
+    for model in models:
+        for r in results[model]:
+            for intent, n in r.base_intent_counts.items():
+                intent_totals.setdefault(intent, {})
+                intent_totals[intent][model] = intent_totals[intent].get(model, 0) + n
+
+    def fmt_count(n: int) -> str:
+        if n == 0:
+            return '<span style="color:#ccc">0</span>'
+        if n >= 1000:
+            return f"{n/1000:.1f}k"
+        return str(n)
+
+    # Build the table: a header row per category, intent rows underneath.
+    n_model_cols = len(models)
+    model_headers = "".join(
+        f'<th style="text-align:right;font-size:10.5px;color:{MODELS[m]["color"]};font-weight:600">'
+        f'{MODELS[m]["label"]}</th>'
+        for m in models
+    )
+
+    rows_html = []
+    for category, intents in _TAXONOMY_ORDER:
+        cat_color = HIGH_LEVEL_COLORS.get(category, "#666")
+        rows_html.append(
+            f'<tr style="background:#faf7ed">'
+            f'<td colspan="{3 + n_model_cols}" '
+            f'style="padding-top:8px;padding-bottom:4px;border-bottom:1px solid #d0d0d0">'
+            f'<span style="display:inline-block;width:8px;height:8px;background:{cat_color};'
+            f'border-radius:1px;margin-right:8px;vertical-align:middle"></span>'
+            f'<span style="font-family:\'Palatino Linotype\',serif;font-size:13px;'
+            f'font-style:italic;color:{cat_color}">{category}</span>'
+            f'</td></tr>'
+        )
+        for intent in intents:
+            desc = INTENT_DESCRIPTIONS.get(intent, "")
+            rule = _TAXONOMY_RULES.get(intent, "")
+            counts_cells = "".join(
+                f'<td style="text-align:right;font-variant-numeric:tabular-nums;color:#888">'
+                f'{fmt_count(intent_totals.get(intent, {}).get(m, 0))}</td>'
+                for m in models
+            )
+            rows_html.append(
+                f'<tr>'
+                f'<td style="font-family:\'SF Mono\',Menlo,Consolas,monospace;font-size:11.5px;'
+                f'white-space:nowrap;padding-left:20px;color:#333">{intent}</td>'
+                f'<td style="font-size:12px;color:#555">{desc}</td>'
+                f'<td style="font-size:12px;color:#444;line-height:1.45">{rule}</td>'
+                f'{counts_cells}</tr>'
+            )
+
+    table = (
+        '<table style="border-collapse:collapse;width:100%;margin-bottom:16px">'
+        '<thead><tr>'
+        '<th style="text-align:left;width:180px">intent</th>'
+        '<th style="text-align:left;width:22%">description</th>'
+        '<th style="text-align:left">classification rule</th>'
+        f'{model_headers}'
+        '</tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody>'
+        '</table>'
+    )
+
+    phenomenon = (
+        '<p style="font-size:13px;color:#444;margin:0 0 8px 0">'
+        'Every step is labelled by a deterministic, priority-ordered ruleset in '
+        '<code>scripts/classify_intent.py</code> &mdash; no model inference. '
+        'Each row shows the intent, what it means, the literal rule that fires it, '
+        'and how often it fires per model.'
+        '</p>'
+    )
+
+    algorithm = (
+        '<div style="font-size:12px;color:#444;background:#f5f1e4;border-left:3px solid #c8b88a;'
+        'padding:10px 14px;margin:10px 0 16px 0;line-height:1.55;max-width:900px">'
+        '<p style="margin:0 0 4px 0"><strong>Classification order</strong> '
+        '(first rule that matches wins):</p>'
+        '<ol style="margin:4px 0 0 18px;padding:0">'
+        '<li>Empty action &rarr; <code>empty</code>. <code>submit</code> prefix &rarr; <code>submit</code>.</li>'
+        '<li><code>str_replace_editor {view, create, str_replace, insert, undo_edit}</code> '
+        '&rarr; classified by sub-command and filename pattern (test/config/repro/verify/doc).</li>'
+        '<li>Bash is unwrapped: strip <code>bash -lc "..."</code>, leading <code>cd ... &amp;&amp;</code>, '
+        '<code>source ... &amp;&amp;</code>, <code>timeout N</code>, and <code>FOO=bar</code> env prefixes.</li>'
+        '<li>If the observation shows a shell-level error '
+        '(<code>syntax error</code>, <code>command not found</code>, <code>unexpected token</code>, &hellip;), '
+        'the command head routes to the matching <code>(failed)</code> label.</li>'
+        '<li>Otherwise match the command head: test runners, compile/syntax, search, read, list, '
+        'git, python/node scripts (named vs. inline, with inline further sub-classified by code shape), '
+        'file cleanup, install, service, tool-exists, metadata, echo.</li>'
+        '<li>Anything that reached the end is <code>bash-other</code> (&lt;2% of steps by design).</li>'
+        '</ol>'
+        '</div>'
+    )
+
+    notes = (
+        '<p>The label describes <em>what the command is</em>, derived from the action '
+        'string and filename alone &mdash; no positional context (before/after first edit) '
+        'and no outcome signal is used. A failed grep is still a search attempt.</p>'
+        '<p><strong>(failed)</strong> variants classify by intended action, not outcome. '
+        'They require a shell-level error in the first 500 chars of the observation.</p>'
+        '<p><strong>run-inline-snippet</strong> is a residual &mdash; inline snippets '
+        '(<code>python -c</code>, <code>python - &lt;&lt;</code>, <code>node -e</code>) are first '
+        'routed to <code>run-inline-verify</code> / <code>read-via-inline-script</code> / '
+        '<code>edit-via-inline-script</code> / <code>create-file-via-inline-script</code> / '
+        '<code>check-version</code> by inspecting the code shape.</p>'
+        '<p><strong>Pass/fail outcome</strong> for verify intents (used by '
+        '<code>seq-first-all-pass</code> / <code>seq-work-done</code>) is a separate detector '
+        'that reads the observation for unambiguous runner summaries: '
+        'e.g.&nbsp;pytest <code>N passed in Xs</code> / <code>N failed</code>, '
+        'go <code>ok package</code> / <code>FAIL package</code>, '
+        'jest <code>Tests: N passed</code> / <code>N failed</code>. '
+        'Ambiguous output returns unknown.</p>'
+        '<p>Canonical source: <code>scripts/classify_intent.py</code> and '
+        '<code>docs/intent-classification-rules.md</code>.</p>'
+    )
+
+    return [(
+        "<h2>1b. Intent Classification Taxonomy</h2>",
+        phenomenon + algorithm + table,
+        notes,
+    )]
 
 
 def render_intent_sections(results, models):
@@ -1632,7 +2070,7 @@ def render_resolution_sections(results, models) -> list[tuple[str, str, str]]:
     return sections
 
 
-def render_html(results) -> str:
+def render_html(results, failure_data=None) -> str:
     """Results is dict[str, list[FileResult]] from process_all."""
     models = sorted(results.keys())
     sections = []
@@ -1640,10 +2078,16 @@ def render_html(results) -> str:
     # Sections 0, 0b, 1: resolution, exit status, metadata (with viz)
     sections.extend(render_resolution_sections(results, models))
 
+    # 1b: Intent classification taxonomy (definitions, rules, per-model counts)
+    sections.extend(render_taxonomy_section(results, models))
+
     sections.extend(render_intent_sections(results, models))
 
     # 5, 7, 8. Verify sections (with inline viz)
     sections.extend(render_verify_sections(results, models))
+
+    # 8b. Failure mode breakdown, with GPT-focused examples
+    sections.extend(render_failure_sections(failure_data, models))
 
     # 9 & 10. Work-done vs Resolved + Structural Markers (with inline viz)
     sections.extend(render_structure_sections(results, models))
@@ -1698,15 +2142,32 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", default="data")
     parser.add_argument("-o", "--output", default="docs/reference.html")
+    parser.add_argument(
+        "--models",
+        default=None,
+        help="Comma-separated model keys to include (e.g. claude45,gpt5). Defaults to all.",
+    )
     args = parser.parse_args()
 
+    models = [m.strip() for m in args.models.split(",")] if args.models else None
+
+    data_root = Path(args.data_root)
+
     print("Processing trajectories...")
-    results = process_all(Path(args.data_root))
+    results = process_all(data_root, models=models)
     for model, data in sorted(results.items()):
         print(f"  {model}: {len(data)} trajectories")
 
+    failure_data = None
+    failure_path = data_root / "failure_modes.json"
+    if failure_path.exists():
+        failure_data = json.loads(failure_path.read_text())
+        print(f"Loaded failure modes from {failure_path}")
+    else:
+        print(f"Skipping failure modes section ({failure_path} not found)")
+
     print("Rendering HTML...")
-    html = render_html(results)
+    html = render_html(results, failure_data=failure_data)
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)

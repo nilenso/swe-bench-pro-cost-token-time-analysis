@@ -154,6 +154,108 @@ function aggRow(label, gVals, cVals, opts) {
   return `<tr><td>${label}${desc}</td><td class="highlight-g">${gStr}</td><td class="highlight-c">${cStr}</td><td class="ratio">${r}</td></tr>`;
 }
 
+// ── Ratio Histogram (SVG, log-scale x-axis centered on 1.0) ────────
+function ratioHistogram(gVals, cVals, opts) {
+  opts = opts || {};
+  const title = opts.title || '';
+  const fmtTick = opts.fmtTick || (v => v.toFixed(1) + '×');
+  const W = opts.width || 400, H = opts.height || 180;
+  const PAD = {l: 55, r: 10, t: 5, b: 28};
+  const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
+  const nBins = opts.bins || 30;
+
+  // Compute per-task ratios (claude / gpt5), skip zeros
+  const ratios = [];
+  for (let i = 0; i < gVals.length; i++) {
+    if (gVals[i] > 0 && cVals[i] > 0) ratios.push(cVals[i] / gVals[i]);
+  }
+  if (!ratios.length) return `<div class="fig-box"><h4>${title}</h4><span class="muted">No data</span></div>`;
+
+  // Log2 ratio axis, symmetric around 1× (i.e. 0 in log2-space)
+  const log2Ratios = ratios.map(v => Math.log2(v));
+  const maxAbsLog2 = Math.max(...log2Ratios.map(v => Math.abs(v)), 1);
+  const axisAbs = Math.max(4, Math.ceil(maxAbsLog2)); // at least [1/16, 16]
+  const log2Lo = -axisAbs;
+  const log2Hi = axisAbs;
+  const log2Range = log2Hi - log2Lo;
+  const log2BinW = log2Range / nBins;
+
+  const bins = new Array(nBins).fill(0);
+  ratios.forEach(v => {
+    let i = Math.floor((Math.log2(v) - log2Lo) / log2BinW);
+    if (i >= nBins) i = nBins - 1;
+    if (i < 0) i = 0;
+    bins[i]++;
+  });
+  const maxCount = Math.max(...bins, 1);
+  const barW = pw / nBins;
+
+  // Stats
+  const med = median(ratios);
+  const p25 = [...ratios].sort((a,b)=>a-b)[Math.floor(ratios.length * 0.25)];
+  const p75 = [...ratios].sort((a,b)=>a-b)[Math.floor(ratios.length * 0.75)];
+  const aboveOne = ratios.filter(r => r > 1).length;
+
+  const xFromLog2 = v => PAD.l + ((v - log2Lo) / log2Range) * pw;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">`;
+
+  // Y-axis ticks
+  const yTicks = [0, Math.round(maxCount / 2), maxCount];
+  yTicks.forEach(t => {
+    const y = PAD.t + ph - (t / maxCount) * ph;
+    svg += `<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + pw}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/>`;
+    svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${t}</text>`;
+  });
+
+  // 1.0 reference line (always centered on symmetric log-ratio axis)
+  const xOne = xFromLog2(0);
+  svg += `<line x1="${xOne}" y1="${PAD.t}" x2="${xOne}" y2="${PAD.t + ph}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>`;
+  svg += `<text x="${xOne}" y="${PAD.t + ph + 12}" text-anchor="middle" fill="#777" font-size="10" font-family="-apple-system, sans-serif">1×</text>`;
+
+  // Median line
+  const xMed = xFromLog2(Math.log2(med));
+  svg += `<line x1="${xMed}" y1="${PAD.t}" x2="${xMed}" y2="${PAD.t + ph}" stroke="#f59e0b" stroke-width="1.5" opacity="0.7"/>`;
+
+  // Bars — color by side of 1.0
+  for (let i = 0; i < nBins; i++) {
+    if (bins[i] === 0) continue;
+    const x = PAD.l + i * barW;
+    const h = (bins[i] / maxCount) * ph;
+    const log2Mid = log2Lo + (i + 0.5) * log2BinW;
+    const fill = log2Mid < 0 ? '#c084fc' : '#4ade80';  // purple = GPT-5 higher, green = Sonnet 4.5 higher
+    svg += `<rect x="${x}" y="${PAD.t + ph - h}" width="${barW - 1}" height="${h}" fill="${fill}" opacity="0.55"/>`;
+  }
+
+  // X-axis ticks (explicit multiplicative ratios)
+  const tickVals = [0.25, 0.5, 1, 2, 4, 8, 16];
+  tickVals.forEach(v => {
+    const lv = Math.log2(v);
+    if (lv < log2Lo || lv > log2Hi) return;
+    const x = xFromLog2(lv);
+    const label = (v % 1 === 0 ? v.toFixed(0) : v.toString()) + '×';
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${label}</text>`;
+  });
+
+  svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#333" stroke-width="1"/>`;
+
+  // Legend
+  svg += `<rect x="${PAD.l + pw - 160}" y="${PAD.t}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
+  svg += `<text x="${PAD.l + pw - 147}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5 higher</text>`;
+  svg += `<rect x="${PAD.l + pw - 80}" y="${PAD.t}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
+  svg += `<text x="${PAD.l + pw - 67}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">Sonnet 4.5 higher</text>`;
+  // Median label
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="10" height="2" fill="#f59e0b" opacity="0.7"/>`;
+  svg += `<text x="${PAD.l + 13}" y="${PAD.t + 5}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">median ${med.toFixed(1)}×</text>`;
+
+  svg += '</svg>';
+
+  let caption = `<span class="fig-caption">Median <b>${med.toFixed(2)}×</b>, IQR ${p25.toFixed(1)}×–${p75.toFixed(1)}×. `;
+  caption += `Sonnet 4.5 higher on <b>${aboveOne}/${ratios.length}</b> tasks (${(100*aboveOne/ratios.length).toFixed(0)}%).</span>`;
+
+  return `<div class="fig-box"><h4>${title}</h4>${svg}${caption}</div>`;
+}
+
 // ── Histogram (SVG, log-scale x-axis) ──────────────────────────────
 function histogram(gVals, cVals, opts) {
   opts = opts || {};
@@ -298,6 +400,7 @@ function render(filtered) {
 
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
+  html += ratioHistogram(gCost, cCost, {title: 'Per-task cost ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
   html += '</div></div>';
   html += '<table>' + hdr;
   html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task.'});
@@ -324,6 +427,10 @@ function render(filtered) {
   html += histogram(gOut, cOut, {title: 'Output tokens per instance', fmtTick: v => (v/1e3).toFixed(0) + 'K'});
   html += '</div>';
   html += `<p class="fig-caption"><b>Token distributions per instance.</b> Left: total input tokens sent across all API calls. Conversation history accumulates each turn, so this grows with each step. Right: visible output tokens (response text plus tool call arguments). X-axis is log-scaled.</p>`;
+  html += '<div class="fig-row" style="margin-top:16px">';
+  html += ratioHistogram(gIn, cIn, {title: 'Per-task input token ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += ratioHistogram(gOut, cOut, {title: 'Per-task output token ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += '</div>';
   html += '</div>';
 
   // Key contrast
@@ -365,6 +472,10 @@ function render(filtered) {
   html += histogram(gSt, cSt, {title: 'Steps per instance', fmtTick: v => v.toFixed(0)});
   html += '</div>';
   html += `<p class="fig-caption"><b>Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites). Right: number of agent steps, where each step is one model turn followed by one tool execution. Wall-clock time and model inference latency are not recorded in this dataset. X-axis is log-scaled.</p>`;
+  html += '<div class="fig-row" style="margin-top:16px">';
+  html += ratioHistogram(gTT, cTT, {title: 'Per-task tool time ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += ratioHistogram(gSt, cSt, {title: 'Per-task steps ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += '</div>';
   html += '</div>';
 
   // Prose

@@ -486,6 +486,12 @@ def build_analytics_payload(results: Results) -> dict:
         vals = [fr.positions["last_edit"] for fr in frs if fr.positions.get("last_edit") is not None]
         median_last_edit[model] = round(statistics.median(vals)) if vals else None
 
+    # Per-model resolve rate (% of trajectories with fr.resolved == True)
+    resolve_rate = {}
+    for model, frs in results.items():
+        n = len(frs)
+        resolve_rate[model] = round(sum(1 for fr in frs if fr.resolved) / n * 100, 1) if n else 0.0
+
     # Only include models that are in the results
     active_models = [m for m in MODELS if m in results]
 
@@ -511,4 +517,5 @@ def build_analytics_payload(results: Results) -> dict:
         "intent_descriptions": INTENT_DESCRIPTIONS,
         "intent_display_names": INTENT_DISPLAY_NAMES,
         "median_last_edit": median_last_edit,
+        "resolve_rate": resolve_rate,
     }

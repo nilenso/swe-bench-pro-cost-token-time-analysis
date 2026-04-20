@@ -12,5 +12,11 @@ sample_stats.json
 __pycache__/
 *.pyc
 
+# Local/editor state
+.DS_Store
+.cache/
+.claude/
+.pi/
+
 # Paper PDF
 swe_bench_pro_paper.pdf

@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 _CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "analysis_pi"
-_CACHE_VERSION = "v2"
+_CACHE_VERSION = "v6"
 
 
 def collect_files(data_root: Path) -> list[Path]:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import statistics
 import sys
 from pathlib import Path
 
@@ -23,7 +24,9 @@ from analysis_pi.models import (
     build_model_registry,
 )
 from analysis_pi.orchestrate import process_all
+from analysis_pi.resolved import compute_resolution_by_model
 from analysis_pi.session_filter import DEFAULT_EXACT_MODELS, SessionFilter, collect_filtered_paths
+from analysis_pi.user_messages import CLASS_ORDER, analyze_user_messages
 
 
 def _filter_results_to_paths(results: dict[str, list], allowed_paths: dict[str, set[str]]) -> dict[str, list]:
@@ -65,6 +68,284 @@ def _pct_bar(pct: float, color: str) -> str:
     )
 
 
+def _heat_strip(values: list[float], color: str) -> str:
+    cells = []
+    for i, pct in enumerate(values):
+        alpha = max(0.06, min(0.92, pct / 100.0))
+        title = f"{i * 5}-{i * 5 + 5}% of trajectory: {pct:.1f}% of sessions"
+        cells.append(
+            f'<span class="heat-cell" title="{html.escape(title)}" '
+            f'style="background:{color};opacity:{alpha:.3f}"></span>'
+        )
+    return '<div class="heat-strip">' + ''.join(cells) + '</div>'
+
+
+def _render_intervention_macro_section(user_data: dict, models: list[str], model_meta: dict[str, dict[str, str]]) -> str:
+    macro_defs = [
+        {
+            "key": "analysis_start",
+            "label": "analysis starts",
+            "members": ["task_brief"],
+            "color": "#5a7d9a",
+            "desc": "first task brief / issue-analysis framing message",
+        },
+        {
+            "key": "work_start",
+            "label": "work starts (authorized)",
+            "members": ["authorize_work"],
+            "color": "#4a8a5a",
+            "desc": "first explicit authorization to implement or fix",
+        },
+        {
+            "key": "solution_steering",
+            "label": "solution steering",
+            "members": ["solution_steer", "evidence_or_repro", "qa_or_critique", "validation_request"],
+            "color": "#b56a50",
+            "desc": "first substantive maintainer steering / evidence / critique / validation turn after the brief",
+        },
+        {
+            "key": "workflow_closeout",
+            "label": "workflow closeout",
+            "members": ["workflow_closeout"],
+            "color": "#8a6a9a",
+            "desc": "first commit / push / changelog / comment / close-issue style instruction",
+        },
+    ]
+
+    def collect_scope_messages(scope: str | None) -> tuple[list[dict], int]:
+        if scope is None:
+            msgs = []
+            for model in models:
+                for label in CLASS_ORDER:
+                    msgs.extend(user_data["per_model"][model]["classes"][label]["messages"])
+            return msgs, user_data["total_sessions"]
+        pdata = user_data["per_model"][scope]
+        msgs = []
+        for label in CLASS_ORDER:
+            msgs.extend(pdata["classes"][label]["messages"])
+        return msgs, pdata["num_sessions"]
+
+    def scope_stats(scope: str | None) -> dict[str, dict]:
+        rows = {}
+        _, num_sessions = collect_scope_messages(scope)
+        by_label = {}
+        for label in CLASS_ORDER:
+            if scope is None:
+                pool = []
+                for model in models:
+                    pool.extend(user_data["per_model"][model]["classes"][label]["messages"])
+            else:
+                pool = list(user_data["per_model"][scope]["classes"][label]["messages"])
+            by_label[label] = pool
+        for macro in macro_defs:
+            recs = []
+            for label in macro["members"]:
+                recs.extend(by_label[label])
+            per_path: dict[str, list[dict]] = {}
+            for rec in recs:
+                per_path.setdefault(rec["path"], []).append(rec)
+            firsts = []
+            for path, msgs in per_path.items():
+                msgs = sorted(msgs, key=lambda m: (m["message_index"], m["progress_pct"]))
+                firsts.append(msgs[0]["progress_pct"])
+            firsts.sort()
+            if firsts:
+                med = round(statistics.median(firsts), 1)
+                if len(firsts) >= 2:
+                    p25 = round(statistics.quantiles(firsts, n=4)[0], 1)
+                    p75 = round(statistics.quantiles(firsts, n=4)[2], 1)
+                else:
+                    p25 = p75 = round(firsts[0], 1)
+            else:
+                med = p25 = p75 = None
+            rows[macro["key"]] = {
+                "session_count": len(per_path),
+                "session_pct": round(len(per_path) / num_sessions * 100, 1) if num_sessions else 0.0,
+                "median": med,
+                "p25": p25,
+                "p75": p75,
+            }
+        return rows
+
+    def chart(scope_label: str, color: str, stats: dict[str, dict]) -> str:
+        row_html = []
+        for macro in macro_defs:
+            s = stats[macro["key"]]
+            if s["median"] is None:
+                track = '<div class="marker-track"></div>'
+                summary = '&mdash;'
+            else:
+                width = max(0.0, (s["p75"] or 0) - (s["p25"] or 0))
+                track = (
+                    '<div class="marker-track">'
+                    '<span class="marker-grid" style="left:0%"></span>'
+                    '<span class="marker-grid" style="left:25%"></span>'
+                    '<span class="marker-grid" style="left:50%"></span>'
+                    '<span class="marker-grid" style="left:75%"></span>'
+                    '<span class="marker-grid" style="left:100%"></span>'
+                    f'<span class="marker-iqr" style="left:{s["p25"]}%;width:{width}%;background:{macro["color"]}"></span>'
+                    f'<span class="marker-dot" style="left:{s["median"]}%;background:{macro["color"]}"></span>'
+                    '</div>'
+                )
+                summary = f'{s["session_pct"]:.1f}% sessions · first @ {s["median"]:.1f}%'
+            row_html.append(
+                '<div class="marker-row">'
+                f'<div class="marker-label"><code>{html.escape(macro["label"])}</code><div class="muted-inline">{html.escape(macro["desc"])}</div></div>'
+                + track +
+                f'<div class="marker-summary">{summary}</div>'
+                '</div>'
+            )
+        return (
+            '<div class="marker-card">'
+            f'<div class="card-title" style="color:{color}">{html.escape(scope_label)}</div>'
+            '<div class="marker-axis"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>'
+            + ''.join(row_html) +
+            '</div>'
+        )
+
+    overall_stats = scope_stats(None)
+    parts = [
+        '<section><h2>11. Maintainer intervention markers</h2>'
+        '<p class="note">This is the higher-level phase view derived from the 7 user-message classes. '
+        'For each model, the marker shows the <strong>median first occurrence</strong> of that intervention type as a percentage of trajectory progress; '
+        'the horizontal bar shows the interquartile range (p25–p75). '
+        'This is the user-message analogue of structural markers like first edit / last edit.</p>'
+        '<p class="note"><strong>solution steering</strong> here intentionally lumps together <code>solution_steer</code>, '
+        '<code>evidence_or_repro</code>, <code>qa_or_critique</code>, and <code>validation_request</code>.</p>'
+    ]
+    parts.append(chart('All models combined', '#444', overall_stats))
+    for model in models:
+        parts.append(chart(model_meta[model]['label'], model_meta[model]['color'], scope_stats(model)))
+
+    headers = ['scope'] + [m['label'] for m in macro_defs]
+    table_rows = []
+    def cell(s: dict) -> str:
+        if s['median'] is None:
+            return '&mdash;'
+        return f"{s['session_pct']:.1f}% sessions<br><span class='muted-inline'>median {s['median']:.1f}% · [{s['p25']:.1f},{s['p75']:.1f}]</span>"
+    table_rows.append(['All models combined'] + [cell(overall_stats[m['key']]) for m in macro_defs])
+    for model in models:
+        sstats = scope_stats(model)
+        table_rows.append([html.escape(model_meta[model]['label'])] + [cell(sstats[m['key']]) for m in macro_defs])
+    parts.append(
+        _html_table(headers, table_rows)
+    )
+    parts.append('</section>')
+    return ''.join(parts)
+
+
+def _render_user_message_sections(user_data: dict, models: list[str], model_meta: dict[str, dict[str, str]]) -> str:
+    total_sessions = user_data["total_sessions"]
+    total_messages = user_data["total_messages"]
+    class_desc = user_data["class_descriptions"]
+
+    # Overall summary table.
+    rows = []
+    for label in CLASS_ORDER:
+        stats = user_data["overall"][label]
+        rows.append([
+            f'<code>{html.escape(label)}</code>',
+            html.escape(class_desc[label]),
+            _fmt(stats["message_count"]),
+            f'{stats["message_pct"]:.1f}%',
+            _fmt(stats["session_count"]),
+            f'{stats["session_pct"]:.1f}%',
+            _fmt(stats["first_progress_median"]),
+            _fmt(stats["first_progress_p25"]),
+            _fmt(stats["first_progress_p75"]),
+        ])
+    summary = (
+        '<section><h2>12. User message classes</h2>'
+        '<p class="note">These counts are computed over the raw filtered issue sessions, not just the classified tool-step subset. '
+        'Messages are assigned a single primary class using a deterministic, dataset-tuned rule set. '
+        'The timing columns use the same trajectory-normalised 0-100% progress scale as the stacked trajectory-shape charts: '
+        'for each user message, we count how many assistant tool calls have already happened in that session.</p>'
+        f'<p class="note"><strong>{total_messages}</strong> user messages across <strong>{total_sessions}</strong> strict single-model issue sessions.</p>'
+        + _html_table(
+            [
+                'class', 'description', 'messages', '% of messages', 'sessions', '% of sessions',
+                'median first %', 'p25', 'p75',
+            ],
+            rows,
+        )
+        + '</section>'
+    )
+
+    # Per-model timing strips.
+    per_model_parts = [
+        '<section><h2>13. User intervention timing by model</h2>'
+        '<p class="note">Each heat strip is aligned to the same 20-bin trajectory-normalised timeline used by the analytics stacked-area charts. '
+        'A darker cell means more sessions for that model had at least one message of that class in that 5% trajectory bin. '
+        'The summary percentages at right describe class prevalence and median first-occurrence position.</p>'
+    ]
+    for model in models:
+        pdata = user_data["per_model"].get(model, {})
+        per_model_parts.append(
+            f'<h3 style="margin:22px 0 8px 0;color:{model_meta[model]["color"]};font-style:italic;font-weight:400">'
+            f'{html.escape(model_meta[model]["label"])} '
+            f'<span class="muted-inline">({pdata.get("num_messages", 0)} user messages across {pdata.get("num_sessions", 0)} sessions)</span>'
+            '</h3>'
+        )
+        rows_html = []
+        for label in CLASS_ORDER:
+            stats = pdata["classes"][label]
+            rows_html.append(
+                '<tr>'
+                f'<td><code>{html.escape(label)}</code></td>'
+                f'<td>{html.escape(class_desc[label])}</td>'
+                f'<td>{stats["message_count"]} <span class="muted-inline">({stats["message_pct"]:.1f}%)</span></td>'
+                f'<td>{stats["session_count"]} <span class="muted-inline">({stats["session_pct"]:.1f}%)</span></td>'
+                f'<td>{_fmt(stats["first_progress_median"])} <span class="muted-inline">[{_fmt(stats["first_progress_p25"])}–{_fmt(stats["first_progress_p75"])}]</span></td>'
+                f'<td>{_heat_strip(stats["bin_session_pct"], model_meta[model]["color"])}</td>'
+                '</tr>'
+            )
+        per_model_parts.append(
+            '<table><thead><tr>'
+            '<th>class</th><th>description</th><th>messages</th><th>sessions</th><th>first occurrence</th><th>20-bin prevalence</th>'
+            '</tr></thead><tbody>'
+            + ''.join(rows_html) +
+            '</tbody></table>'
+        )
+    per_model_parts.append('</section>')
+
+    # All raw messages grouped by class and then model.
+    detail_parts = [
+        '<section><h2>14. All user messages by class</h2>'
+        '<p class="note">Every classified user message in the filtered issue subset. '
+        'Each entry records the session, user-turn index, and trajectory progress when that interruption happened.</p>'
+    ]
+    for label in CLASS_ORDER:
+        overall = user_data["overall"][label]
+        detail_parts.append(
+            '<details class="msg-group" open>'
+            f'<summary><code>{html.escape(label)}</code> — {overall["message_count"]} messages across {overall["session_count"]} sessions '
+            f'({overall["session_pct"]:.1f}% of sessions)</summary>'
+            f'<p class="note" style="margin-top:8px">{html.escape(class_desc[label])}</p>'
+        )
+        for model in models:
+            stats = user_data["per_model"][model]["classes"][label]
+            if not stats["messages"]:
+                continue
+            detail_parts.append(
+                f'<details class="msg-subgroup"><summary style="color:{model_meta[model]["color"]}">'
+                f'{html.escape(model_meta[model]["label"])} — {stats["message_count"]} messages in {stats["session_count"]} sessions'
+                '</summary><ul class="msg-list">'
+            )
+            for msg in stats["messages"]:
+                detail_parts.append(
+                    '<li>'
+                    f'<div class="msg-meta"><strong>{html.escape(msg["session_name"] or Path(msg["path"]).name)}</strong> '
+                    f'<span class="muted-inline">turn {msg["message_index"]} · {msg["progress_pct"]:.1f}% through trajectory · {html.escape(Path(msg["path"]).name)}</span></div>'
+                    f'<div class="msg-text">{html.escape(msg["text"] or "<empty>")}</div>'
+                    '</li>'
+                )
+            detail_parts.append('</ul></details>')
+        detail_parts.append('</details>')
+    detail_parts.append('</section>')
+
+    return summary + ''.join(per_model_parts) + ''.join(detail_parts)
+
+
 def _intent_counters(results: dict[str, list], models: list[str]) -> tuple[dict[str, dict[str, int]], dict[str, int]]:
     counts = {m: {} for m in models}
     totals = {m: 0 for m in models}
@@ -78,6 +359,117 @@ def _intent_counters(results: dict[str, list], models: list[str]) -> tuple[dict[
         counts[m] = c
         totals[m] = total
     return counts, totals
+
+
+_KIND_LABELS = {
+    "push": "git push",
+    "gh_close": "gh issue close",
+    "gh_merge": "gh pr merge",
+    "gh_comment": "triage comment",
+    "user_close": "maintainer close",
+}
+
+_KIND_DESCRIPTIONS = {
+    "push": "agent pushed the fix to the remote",
+    "gh_close": "agent ran <code>gh issue close</code>",
+    "gh_merge": "agent ran <code>gh pr merge</code>",
+    "gh_comment": "agent posted a triage comment after the maintainer asked to comment/close",
+    "user_close": "maintainer gave a terminal close/triage instruction; the agent didn't ship a shell action but the task was decided",
+}
+
+
+def _render_resolution_section(stats: dict, models: list[str], model_meta: dict[str, dict[str, str]]) -> str:
+    """Scheme-3 per-issue resolution rate with a broadened success rule."""
+    rows: list[list[str]] = []
+    max_rate = 0.0
+    for m in models:
+        s = stats.get(m)
+        if s is None:
+            continue
+        if s.resolve_rate > max_rate:
+            max_rate = s.resolve_rate
+
+    # Bar chart rows.
+    bars: list[str] = []
+    for m in models:
+        s = stats.get(m)
+        if s is None:
+            continue
+        color = model_meta[m]["color"]
+        width = (s.resolve_rate / 100.0) * 100.0
+        bars.append(
+            '<div class="resolve-row">'
+            f'<div class="resolve-label" style="color:{color}">{html.escape(model_meta[m]["label"])}</div>'
+            '<div class="resolve-track">'
+            f'<div class="resolve-bar" style="width:{width:.1f}%;background:{color}"></div>'
+            '</div>'
+            f'<div class="resolve-summary">'
+            f'<strong>{s.resolve_rate:.1f}%</strong> '
+            f'<span class="muted-inline">({s.n_issues_resolved}/{s.n_issues_attempted} issues · {s.n_sessions} sessions)</span>'
+            '</div>'
+            '</div>'
+        )
+
+    # Table with kind breakdown.
+    kinds_order = ["push", "gh_close", "gh_merge", "gh_comment", "user_close"]
+    headers = [
+        "model",
+        "sessions (filtered)",
+        "distinct issues",
+        "resolved",
+        "resolve rate",
+    ] + [_KIND_LABELS[k] for k in kinds_order]
+    for m in models:
+        s = stats.get(m)
+        if s is None:
+            continue
+        kc = s.kind_counts
+        row = [
+            f'<span style="color:{model_meta[m]["color"]}">{html.escape(model_meta[m]["label"])}</span>',
+            str(s.n_sessions),
+            str(s.n_issues_attempted),
+            str(s.n_issues_resolved),
+            _pct_bar(s.resolve_rate, model_meta[m]["color"]),
+        ] + [str(kc.get(k, 0)) for k in kinds_order]
+        rows.append(row)
+
+    # Totals.
+    total_sessions = sum(s.n_sessions for s in stats.values())
+    total_issues = sum(s.n_issues_attempted for s in stats.values())
+    total_resolved = sum(s.n_issues_resolved for s in stats.values())
+    total_rate = (total_resolved / total_issues * 100.0) if total_issues else 0.0
+    total_kinds = {k: sum(s.kind_counts.get(k, 0) for s in stats.values()) for k in kinds_order}
+    rows.append(
+        [
+            "<strong>total</strong>",
+            f"<strong>{total_sessions}</strong>",
+            f"<strong>{total_issues}</strong>",
+            f"<strong>{total_resolved}</strong>",
+            f"<strong>{total_rate:.1f}%</strong>",
+        ]
+        + [f"<strong>{total_kinds[k]}</strong>" for k in kinds_order]
+    )
+
+    kind_legend = "".join(
+        f'<li><code>{_KIND_LABELS[k]}</code> — {_KIND_DESCRIPTIONS[k]}</li>'
+        for k in kinds_order
+    )
+
+    return (
+        '<section><h2>0. Task resolution rate (per issue)</h2>'
+        '<p class="note">Per-model resolve rate using SWE-bench-style unit of analysis: '
+        'one <em>(model, issue#)</em> pair per attempt, resolved if <strong>any</strong> same-model session on that issue reached a terminal action. '
+        'Issues are joined across sessions by the GitHub issue/PR number that appears in the session name or in the first user message. '
+        'This counts all legitimate maintainer completion mechanisms (ship, triage-close, duplicate-close, won\'t-fix), not just code-shipped resolutions.</p>'
+        '<div class="resolve-chart">' + ''.join(bars) + '</div>'
+        + _html_table(headers, rows)
+        + '<details class="resolve-legend"><summary>What each resolution kind means</summary>'
+        f'<ul>{kind_legend}</ul>'
+        '<p class="note" style="margin-top:8px"><strong>Precedence:</strong> <code>push</code> > <code>gh_merge</code> > <code>gh_close</code> > <code>gh_comment</code> > <code>user_close</code>. '
+        'A session with both a push and a triage comment is counted as <code>push</code>.</p>'
+        '</details>'
+        '</section>'
+    )
 
 
 def _render_detailed_classification_section(results: dict[str, list], models: list[str]) -> str:
@@ -127,15 +519,23 @@ def _render_detailed_classification_section(results: dict[str, list], models: li
 
 def _render_cleanup_decomposition_section(results: dict[str, list], models: list[str]) -> str:
     counts, totals = _intent_counters(results, models)
-    cleanup_intents = [
-        "git-status-log",
-        "git-diff",
-        "git-stash",
+    preferred_order = [
+        "git-github-context",
+        "git-repo-inspect",
+        "git-diff-review",
+        "git-sync-integrate",
+        "git-local-state-change",
+        "git-publish",
         "file-cleanup",
         "create-documentation",
         "start-service",
         "install-deps",
         "check-tool-exists",
+    ]
+    cleanup_intents = [
+        intent
+        for intent in preferred_order
+        if any(counts[m].get(intent, 0) > 0 for m in models)
     ]
     rows: list[list[str]] = []
     for intent in cleanup_intents:
@@ -161,13 +561,13 @@ def _render_cleanup_decomposition_section(results: dict[str, list], models: list
 
     return (
         '<section><h2>4b. Cleanup decomposition</h2>'
-        '<p class="note">In the inherited phase schema, <strong>cleanup = git + housekeeping</strong>. For Pi transcripts this phase is mostly git workflow, not literal cleanup. This table makes that explicit.</p>'
+        '<p class="note">In the inherited phase schema, <strong>cleanup = git + housekeeping</strong>. For Pi transcripts this phase is mostly repo workflow, not literal cleanup. This table makes the git side explicit.</p>'
         + _html_table(["high-level", "intent", "description"] + [html.escape(m) for m in models], summary_rows + rows)
         + '</section>'
     )
 
 
-def render_html(results: dict[str, list], raw_single_counts: dict[str, int]) -> str:
+def render_html(results: dict[str, list], raw_single_counts: dict[str, int], user_data: dict, resolution_stats: dict) -> str:
     models = sorted(
         results.keys(),
         key=lambda m: (-raw_single_counts.get(m, 0), -len(results.get(m, [])), m),
@@ -189,6 +589,9 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int]) -> 
     )
 
     sections: list[str] = []
+
+    # 0. Task resolution rate
+    sections.append(_render_resolution_section(resolution_stats, models, model_meta))
 
     # 1. Metadata summary
     rows = []
@@ -375,6 +778,9 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int]) -> 
         + '</section>'
     )
 
+    sections.append(_render_intervention_macro_section(user_data, models, model_meta))
+    sections.append(_render_user_message_sections(user_data, models, model_meta))
+
     # Sidebar summary cards
     cards = []
     for m in models:
@@ -437,13 +843,41 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int]) -> 
     th {{ font-size: 12px; color: var(--muted); font-style: italic; font-weight: 400; position: sticky; top: 0; background: #fbf8ee; }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }}
     a {{ color: inherit; }}
+    .heat-strip {{ display:grid; grid-template-columns: repeat(20, minmax(10px, 1fr)); gap:2px; min-width: 300px; }}
+    .heat-cell {{ display:block; height:14px; border-radius:2px; background:#999; }}
+    .marker-card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 12px 0; }}
+    .marker-axis {{ margin: 8px 0 10px 220px; display:flex; justify-content:space-between; color: var(--muted); font-size: 12px; max-width: 560px; }}
+    .marker-row {{ display:grid; grid-template-columns: 210px minmax(360px, 560px) 170px; gap: 10px; align-items:center; margin: 8px 0; }}
+    .marker-label {{ font-size: 13px; }}
+    .marker-summary {{ font-size: 12px; color: var(--muted); }}
+    .marker-track {{ position: relative; height: 18px; background: #f1efe6; border-radius: 999px; overflow: visible; }}
+    .marker-grid {{ position:absolute; top:-3px; bottom:-3px; width:1px; background: rgba(0,0,0,0.08); transform: translateX(-0.5px); }}
+    .marker-iqr {{ position:absolute; top:3px; height:12px; border-radius: 999px; opacity: 0.45; }}
+    .marker-dot {{ position:absolute; top:1px; width:16px; height:16px; border-radius: 999px; transform: translateX(-50%); border: 2px solid rgba(255,255,255,0.95); box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }}
+    .resolve-chart {{ margin: 6px 0 18px 0; }}
+    .resolve-row {{ display:grid; grid-template-columns: 160px minmax(240px, 1fr) 260px; gap: 12px; align-items:center; margin: 6px 0; }}
+    .resolve-label {{ font-style: italic; font-size: 13px; }}
+    .resolve-track {{ position: relative; height: 18px; background: #f1efe6; border-radius: 999px; overflow: hidden; }}
+    .resolve-bar {{ position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.78; }}
+    .resolve-summary {{ font-size: 12px; color: var(--muted); }}
+    .resolve-summary strong {{ color: var(--text); font-size: 14px; font-style: italic; font-weight: 400; }}
+    details.resolve-legend {{ background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 14px 0 0 0; }}
+    details.resolve-legend ul {{ margin: 8px 0 0 0; padding-left: 20px; font-size: 13px; }}
+    details.resolve-legend li {{ margin: 3px 0; color: var(--text); }}
+    details.msg-group, details.msg-subgroup {{ background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }}
+    details.msg-subgroup {{ margin: 10px 0 12px 0; }}
+    summary {{ cursor:pointer; }}
+    .msg-list {{ margin: 10px 0 0 0; padding-left: 18px; }}
+    .msg-list li {{ margin: 0 0 10px 0; }}
+    .msg-meta {{ margin-bottom: 2px; }}
+    .msg-text {{ white-space: pre-wrap; }}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Pi transcript reference tables</h1>
-    <div class="subtitle">Same intent taxonomy as the SWE-Agent analysis, adapted to Pi tool calls and currently filtered to strict single-model issue sessions</div>
-    <p class="lede">This page is the Pi-session analogue of the original reference tables. It keeps the same read/search/reproduce/edit/verify taxonomy, but classifies Pi’s <code>read</code>, <code>edit</code>, <code>write</code>, <code>bash</code>, and auxiliary tools into that shared scheme.</p>
+    <div class="subtitle">Same high-level taxonomy as the SWE-Agent analysis, adapted to Pi tool calls and currently filtered to strict single-model issue sessions</div>
+    <p class="lede">This page is the Pi-session analogue of the original reference tables. It keeps the same high-level read/search/reproduce/edit/verify/git structure, but gives Pi a more semantic low-level git decomposition while classifying Pi’s <code>read</code>, <code>edit</code>, <code>write</code>, <code>bash</code>, and auxiliary tools into that shared scheme.</p>
     <div class="tags">{model_tags}</div>
     <div class="cards">{''.join(cards)}</div>
     {''.join(sections)}
@@ -477,7 +911,14 @@ def main() -> None:
     for model in args.models:
         print(f"  {model}: {raw_counts.get(model, 0)} strict single-model sessions, {len(results.get(model, []))} analyzed")
 
-    html_out = render_html(results, {m: raw_counts.get(m, 0) for m in args.models})
+    user_data = analyze_user_messages(allowed_paths)
+    resolution_stats = compute_resolution_by_model(data_root, session_filter)
+    html_out = render_html(
+        results,
+        {m: raw_counts.get(m, 0) for m in args.models},
+        user_data,
+        resolution_stats,
+    )
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html_out)

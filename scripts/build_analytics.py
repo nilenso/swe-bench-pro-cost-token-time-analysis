@@ -26,8 +26,8 @@ from analysis.orchestrate import process_all
 from analysis.aggregate import build_analytics_payload
 
 
-def build_payload(data_root: Path) -> dict:
-    results = process_all(data_root)
+def build_payload(data_root: Path, models: list[str] | None = None) -> dict:
+    results = process_all(data_root, models=models)
     for model, data in sorted(results.items()):
         print(f"  {model}: {len(data)} trajectories")
     return build_analytics_payload(results)
@@ -962,10 +962,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", default="data")
     parser.add_argument("--output", "-o", default="docs/analytics.html")
+    parser.add_argument(
+        "--models",
+        default=None,
+        help="Comma-separated model keys to include (e.g. claude45,gpt5). Defaults to all.",
+    )
     args = parser.parse_args()
 
+    models = [m.strip() for m in args.models.split(",")] if args.models else None
+
     data_root = Path(args.data_root)
-    payload = build_payload(data_root)
+    payload = build_payload(data_root, models=models)
     html = render_html(payload)
 
     out = Path(args.output)

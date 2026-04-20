@@ -171,18 +171,14 @@ function ratioHistogram(gVals, cVals, opts) {
   }
   if (!ratios.length) return `<div class="fig-box"><h4>${title}</h4><span class="muted">No data</span></div>`;
 
-  // Log2 ratio axis, symmetric around 1× (i.e. 0 in log2-space)
-  const log2Ratios = ratios.map(v => Math.log2(v));
-  const maxAbsLog2 = Math.max(...log2Ratios.map(v => Math.abs(v)), 1);
-  const axisAbs = Math.max(4, Math.ceil(maxAbsLog2)); // at least [1/16, 16]
-  const log2Lo = -axisAbs;
-  const log2Hi = axisAbs;
-  const log2Range = log2Hi - log2Lo;
-  const log2BinW = log2Range / nBins;
+  const logRatios = ratios.map(v => Math.log10(v));
+  const logLo = Math.min(...logRatios), logHi = Math.max(...logRatios);
+  const logRange = logHi - logLo || 1;
+  const logBinW = logRange / nBins;
 
   const bins = new Array(nBins).fill(0);
   ratios.forEach(v => {
-    let i = Math.floor((Math.log2(v) - log2Lo) / log2BinW);
+    let i = Math.floor((Math.log10(v) - logLo) / logBinW);
     if (i >= nBins) i = nBins - 1;
     if (i < 0) i = 0;
     bins[i]++;
@@ -194,9 +190,7 @@ function ratioHistogram(gVals, cVals, opts) {
   const med = median(ratios);
   const p25 = [...ratios].sort((a,b)=>a-b)[Math.floor(ratios.length * 0.25)];
   const p75 = [...ratios].sort((a,b)=>a-b)[Math.floor(ratios.length * 0.75)];
-  const aboveOne = ratios.filter(r => r > 1).length;
-
-  const xFromLog2 = v => PAD.l + ((v - log2Lo) / log2Range) * pw;
+  const belowOne = ratios.filter(r => r < 1).length;
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">`;
 
@@ -208,13 +202,15 @@ function ratioHistogram(gVals, cVals, opts) {
     svg += `<text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${t}</text>`;
   });
 
-  // 1.0 reference line (always centered on symmetric log-ratio axis)
-  const xOne = xFromLog2(0);
-  svg += `<line x1="${xOne}" y1="${PAD.t}" x2="${xOne}" y2="${PAD.t + ph}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>`;
-  svg += `<text x="${xOne}" y="${PAD.t + ph + 12}" text-anchor="middle" fill="#777" font-size="10" font-family="-apple-system, sans-serif">1×</text>`;
+  // 1.0 reference line
+  if (logLo < 0 && logHi > 0) {
+    const xOne = PAD.l + ((0 - logLo) / logRange) * pw;
+    svg += `<line x1="${xOne}" y1="${PAD.t}" x2="${xOne}" y2="${PAD.t + ph}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>`;
+    svg += `<text x="${xOne}" y="${PAD.t + ph + 12}" text-anchor="middle" fill="#777" font-size="10" font-family="-apple-system, sans-serif">1×</text>`;
+  }
 
   // Median line
-  const xMed = xFromLog2(Math.log2(med));
+  const xMed = PAD.l + ((Math.log10(med) - logLo) / logRange) * pw;
   svg += `<line x1="${xMed}" y1="${PAD.t}" x2="${xMed}" y2="${PAD.t + ph}" stroke="#f59e0b" stroke-width="1.5" opacity="0.7"/>`;
 
   // Bars — color by side of 1.0
@@ -222,28 +218,27 @@ function ratioHistogram(gVals, cVals, opts) {
     if (bins[i] === 0) continue;
     const x = PAD.l + i * barW;
     const h = (bins[i] / maxCount) * ph;
-    const log2Mid = log2Lo + (i + 0.5) * log2BinW;
-    const fill = log2Mid < 0 ? '#c084fc' : '#4ade80';  // purple = GPT-5 higher, green = Sonnet 4.5 higher
+    const logMid = logLo + (i + 0.5) * logBinW;
+    const fill = logMid < 0 ? '#c084fc' : '#4ade80';  // purple = Claude lower, green = GPT-5 lower
     svg += `<rect x="${x}" y="${PAD.t + ph - h}" width="${barW - 1}" height="${h}" fill="${fill}" opacity="0.55"/>`;
   }
 
-  // X-axis ticks (explicit multiplicative ratios)
-  const tickVals = [0.25, 0.5, 1, 2, 4, 8, 16];
-  tickVals.forEach(v => {
-    const lv = Math.log2(v);
-    if (lv < log2Lo || lv > log2Hi) return;
-    const x = xFromLog2(lv);
-    const label = (v % 1 === 0 ? v.toFixed(0) : v.toString()) + '×';
-    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${label}</text>`;
-  });
+  // X-axis ticks
+  const xTickCount = Math.min(5, nBins);
+  for (let i = 0; i <= xTickCount; i++) {
+    const logVal = logLo + (logRange * i / xTickCount);
+    const val = Math.pow(10, logVal);
+    const x = PAD.l + (i / xTickCount) * pw;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${fmtTick(val)}</text>`;
+  }
 
   svg += `<line x1="${PAD.l}" y1="${PAD.t + ph}" x2="${PAD.l + pw}" y2="${PAD.t + ph}" stroke="#333" stroke-width="1"/>`;
 
   // Legend
   svg += `<rect x="${PAD.l + pw - 160}" y="${PAD.t}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
-  svg += `<text x="${PAD.l + pw - 147}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5 higher</text>`;
+  svg += `<text x="${PAD.l + pw - 147}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">Sonnet 4.5 lower</text>`;
   svg += `<rect x="${PAD.l + pw - 80}" y="${PAD.t}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
-  svg += `<text x="${PAD.l + pw - 67}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">Sonnet 4.5 higher</text>`;
+  svg += `<text x="${PAD.l + pw - 67}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5 lower</text>`;
   // Median label
   svg += `<rect x="${PAD.l}" y="${PAD.t}" width="10" height="2" fill="#f59e0b" opacity="0.7"/>`;
   svg += `<text x="${PAD.l + 13}" y="${PAD.t + 5}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">median ${med.toFixed(1)}×</text>`;
@@ -251,7 +246,7 @@ function ratioHistogram(gVals, cVals, opts) {
   svg += '</svg>';
 
   let caption = `<span class="fig-caption">Median <b>${med.toFixed(2)}×</b>, IQR ${p25.toFixed(1)}×–${p75.toFixed(1)}×. `;
-  caption += `Sonnet 4.5 higher on <b>${aboveOne}/${ratios.length}</b> tasks (${(100*aboveOne/ratios.length).toFixed(0)}%).</span>`;
+  caption += `Sonnet 4.5 lower on <b>${belowOne}/${ratios.length}</b> tasks (${(100*belowOne/ratios.length).toFixed(0)}%).</span>`;
 
   return `<div class="fig-box"><h4>${title}</h4>${svg}${caption}</div>`;
 }
@@ -321,9 +316,90 @@ function histogram(gVals, cVals, opts) {
   svg += `<rect x="${PAD.l + pw - 115}" y="${PAD.t}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
   svg += `<text x="${PAD.l + pw - 102}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5</text>`;
   svg += `<rect x="${PAD.l + pw - 60}" y="${PAD.t}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
-  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">S4.5</text>`;
+  svg += `<text x="${PAD.l + pw - 47}" y="${PAD.t + 9}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">Sonnet 4.5</text>`;
   svg += '</svg>';
   return `<div class="fig-box"><h4>${title}</h4>${svg}</div>`;
+}
+
+// ── Parity Scatter (paired task-by-task, log-log, y=x line) ───────
+function parityScatter(gVals, cVals, opts) {
+  opts = opts || {};
+  const title = opts.title || '';
+  const fmtTick = opts.fmtTick || (v => v.toFixed(0));
+
+  // Keep valid positive pairs only
+  const pairs = [];
+  for (let i = 0; i < gVals.length; i++) {
+    const gx = gVals[i], cy = cVals[i];
+    if (isFinite(gx) && isFinite(cy) && gx > 0 && cy > 0) pairs.push([gx, cy]);
+  }
+  if (!pairs.length) return `<div class="fig-box"><h4>${title}</h4><span class="muted">No data</span></div>`;
+
+  const W = opts.width || 360, H = opts.height || 320;
+  const PAD = {l: 48, r: 12, t: 8, b: 36};
+  const availW = W - PAD.l - PAD.r, availH = H - PAD.t - PAD.b;
+  const side = Math.min(availW, availH);
+  const x0 = PAD.l + (availW - side) / 2;
+  const y0 = PAD.t + (availH - side) / 2;
+
+  const all = pairs.flat();
+  const logAll = all.map(v => Math.log10(v));
+  let logLo = Math.min(...logAll), logHi = Math.max(...logAll);
+  if (logLo === logHi) { logLo -= 0.5; logHi += 0.5; }
+  const pad = (logHi - logLo) * 0.05;
+  logLo -= pad; logHi += pad;
+  const logRange = logHi - logLo;
+
+  const xScale = v => x0 + ((Math.log10(v) - logLo) / logRange) * side;
+  const yScale = v => y0 + side - ((Math.log10(v) - logLo) / logRange) * side;
+
+  const ratios = pairs.map(([gx, cy]) => cy / gx);
+  const med = median(ratios);
+  const below = ratios.filter(r => r < 1).length;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">`;
+
+  // Grid + ticks
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const t = i / tickCount;
+    const x = x0 + t * side;
+    const y = y0 + t * side;
+    const logVal = logLo + t * logRange;
+    const val = Math.pow(10, logVal);
+
+    svg += `<line x1="${x}" y1="${y0}" x2="${x}" y2="${y0 + side}" stroke="#2a2a2a" stroke-width="1"/>`;
+    svg += `<line x1="${x0}" y1="${y}" x2="${x0 + side}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/>`;
+
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${fmtTick(val)}</text>`;
+    svg += `<text x="${x0 - 6}" y="${y + 4}" text-anchor="end" fill="#555" font-size="10" font-family="-apple-system, sans-serif">${fmtTick(val)}</text>`;
+  }
+
+  // Identity line y=x
+  svg += `<line x1="${xScale(Math.pow(10, logLo))}" y1="${yScale(Math.pow(10, logLo))}" x2="${xScale(Math.pow(10, logHi))}" y2="${yScale(Math.pow(10, logHi))}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>`;
+
+  // Points
+  pairs.forEach(([gx, cy]) => {
+    const x = xScale(gx);
+    const y = yScale(cy);
+    const above = cy > gx;
+    const fill = above ? '#c084fc' : '#4ade80';
+    svg += `<circle cx="${x}" cy="${y}" r="2" fill="${fill}" opacity="0.28"/>`;
+  });
+
+  // Axis labels
+  svg += `<text x="${x0 + side/2}" y="${H - 18}" text-anchor="middle" fill="#777" font-size="10" font-family="-apple-system, sans-serif">GPT-5</text>`;
+  svg += `<text x="14" y="${y0 + side/2}" text-anchor="middle" fill="#777" font-size="10" transform="rotate(-90 14 ${y0 + side/2})" font-family="-apple-system, sans-serif">Sonnet 4.5</text>`;
+
+  // Legend
+  svg += `<rect x="${x0 + side - 148}" y="${y0 + 6}" width="10" height="10" fill="#c084fc" opacity="0.6"/>`;
+  svg += `<text x="${x0 + side - 134}" y="${y0 + 15}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">Sonnet 4.5 higher</text>`;
+  svg += `<rect x="${x0 + side - 148}" y="${y0 + 20}" width="10" height="10" fill="#4ade80" opacity="0.6"/>`;
+  svg += `<text x="${x0 + side - 134}" y="${y0 + 29}" fill="#888" font-size="9" font-family="-apple-system, sans-serif">GPT-5 higher</text>`;
+
+  svg += '</svg>';
+
+  return `<div class="fig-box"><h4>${title}</h4>${svg}<p class="fig-caption"><b>Paired view.</b> One dot per task (x=GPT-5, y=Sonnet 4.5). Orange dashed line is parity (y=x). Median ratio (Sonnet 4.5/GPT-5): <b>${med.toFixed(2)}×</b>. Sonnet 4.5 lower on <b>${below}/${pairs.length}</b> tasks (${(100*below/pairs.length).toFixed(1)}%).</p></div>`;
 }
 
 let sortCol = 'gpt5_cost';
@@ -349,7 +425,7 @@ function render(filtered) {
   const cResolved = nBoth + nCOnly;
   const repoCounts = {};
   filtered.forEach(p => { repoCounts[p.repo] = (repoCounts[p.repo] || 0) + 1; });
-  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Sonnet 4.5</th><th>S/G</th></tr>';
+  const hdr = '<tr><th style="text-align:left"></th><th>GPT-5</th><th>Sonnet 4.5</th><th>Sonnet/GPT-5</th></tr>';
 
   let html = '';
 
@@ -400,7 +476,7 @@ function render(filtered) {
 
   html += '<div class="fig"><div class="fig-row">';
   html += histogram(gCost, cCost, {title: 'Cost per instance ($)', fmtTick: v => '$' + v.toFixed(0)});
-  html += ratioHistogram(gCost, cCost, {title: 'Per-task cost ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += parityScatter(gCost, cCost, {title: 'Paired parity: Cost ($)', fmtTick: v => '$' + v.toFixed(0)});
   html += '</div></div>';
   html += '<table>' + hdr;
   html += aggRow('Mean', gCost, cCost, {dollar: true, desc: 'Average API cost per task.'});
@@ -428,8 +504,7 @@ function render(filtered) {
   html += '</div>';
   html += `<p class="fig-caption"><b>Token distributions per instance.</b> Left: total input tokens sent across all API calls. Conversation history accumulates each turn, so this grows with each step. Right: visible output tokens (response text plus tool call arguments). X-axis is log-scaled.</p>`;
   html += '<div class="fig-row" style="margin-top:16px">';
-  html += ratioHistogram(gIn, cIn, {title: 'Per-task input token ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
-  html += ratioHistogram(gOut, cOut, {title: 'Per-task output token ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += parityScatter(gIn, cIn, {title: 'Paired parity: Input tokens', fmtTick: v => (v/1e6).toFixed(1) + 'M'});
   html += '</div>';
   html += '</div>';
 
@@ -473,8 +548,7 @@ function render(filtered) {
   html += '</div>';
   html += `<p class="fig-caption"><b>Execution distributions per instance.</b> Left: total seconds spent running tools (shell commands, file reads, test suites). Right: number of agent steps, where each step is one model turn followed by one tool execution. Wall-clock time and model inference latency are not recorded in this dataset. X-axis is log-scaled.</p>`;
   html += '<div class="fig-row" style="margin-top:16px">';
-  html += ratioHistogram(gTT, cTT, {title: 'Per-task tool time ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
-  html += ratioHistogram(gSt, cSt, {title: 'Per-task steps ratio (S4.5 ÷ GPT-5)', fmtTick: v => v.toFixed(1) + '×'});
+  html += parityScatter(gTT, cTT, {title: 'Paired parity: Tool time (s)', fmtTick: v => v.toFixed(0) + 's'});
   html += '</div>';
   html += '</div>';
 
@@ -528,13 +602,13 @@ function render(filtered) {
     { key: 'gpt5_cost', label: '$ GPT-5', sortFn: (p) => p.gpt5.model_stats.instance_cost },
     { key: 'claude_cost', label: '$ Sonnet 4.5', sortFn: (p) => p.claude.model_stats.instance_cost },
     { key: 'gpt5_steps', label: 'Steps GPT-5', sortFn: (p) => p.gpt5.steps },
-    { key: 'claude_steps', label: 'Steps S4.5', sortFn: (p) => p.claude.steps },
+    { key: 'claude_steps', label: 'Steps Sonnet 4.5', sortFn: (p) => p.claude.steps },
     { key: 'gpt5_input', label: 'Input GPT-5', sortFn: (p) => p.gpt5.model_stats.tokens_sent },
-    { key: 'claude_input', label: 'Input S4.5', sortFn: (p) => p.claude.model_stats.tokens_sent },
+    { key: 'claude_input', label: 'Input Sonnet 4.5', sortFn: (p) => p.claude.model_stats.tokens_sent },
     { key: 'gpt5_output', label: 'Out GPT-5', sortFn: (p) => p.gpt5.output_tokens.total },
-    { key: 'claude_output', label: 'Out S4.5', sortFn: (p) => p.claude.output_tokens.total },
+    { key: 'claude_output', label: 'Out Sonnet 4.5', sortFn: (p) => p.claude.output_tokens.total },
     { key: 'gpt5_patch', label: 'Patch GPT-5', sortFn: (p) => p.gpt5.patch_chars },
-    { key: 'claude_patch', label: 'Patch S4.5', sortFn: (p) => p.claude.patch_chars },
+    { key: 'claude_patch', label: 'Patch Sonnet 4.5', sortFn: (p) => p.claude.patch_chars },
   ];
 
   const colDef = cols.find(c => c.key === sortCol) || cols[3];

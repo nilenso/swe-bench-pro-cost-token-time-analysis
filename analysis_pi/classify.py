@@ -21,7 +21,7 @@ if _SCRIPTS_DIR not in sys.path:
 
 import classify_intent as ci  # noqa: E402
 
-from .models import HIGH_LEVEL_LETTER, infer_repo_name, normalize_model_name
+from .models import HIGH_LEVEL_LETTER, INTENT_TO_HIGH_LEVEL, infer_repo_name, normalize_model_name
 
 SOURCE_EDIT_INTENTS = ci.SOURCE_EDIT_INTENTS
 SEQUENCE_VERIFY_INTENTS = ci.SEQUENCE_VERIFY_INTENTS
@@ -165,7 +165,7 @@ def _normalize_edits(arguments: dict) -> list[dict]:
 
 def _classify_read(arguments: dict, observation: str, is_error: bool) -> str:
     if is_error:
-        return "read-via-bash(failed)"
+        return "read-file-failed"
     path = arguments.get("path", "") or ""
     base = _basename(path)
     if "offset" in arguments or "limit" in arguments:
@@ -195,14 +195,17 @@ def _classify_write(arguments: dict) -> str:
 
 
 def _classify_edit(arguments: dict, is_error: bool) -> str:
-    if is_error:
-        return "bash-command(failed)"
     path = arguments.get("path", "") or ""
     filename = _basename(path)
+    is_test_or_repro = _contains_any(
+        filename, ("test_", "repro", "verify", "check", ".test.", ".spec.")
+    )
+    if is_error:
+        return "edit-test-or-repro(failed)" if is_test_or_repro else "edit-source(failed)"
     edits = _normalize_edits(arguments)
     if edits and any((e.get("oldText") or e.get("old_string") or "") == "" for e in edits):
         return "insert-source"
-    if _contains_any(filename, ("test_", "repro", "verify", "check", ".test.", ".spec.")):
+    if is_test_or_repro:
         return "edit-test-or-repro"
     return "edit-source"
 
@@ -249,40 +252,72 @@ def _extract_tsx_inline_snippet(cmd: str) -> str:
     return ""
 
 
+def _classify_pi_git_intent(action: str) -> str:
+    head = action.splitlines()[0].strip().lower() if action.strip() else ""
+    if head.startswith("gh "):
+        return "git-github-context"
+
+    sub = ci._get_git_subcommand(action)
+    if sub == "diff":
+        return "git-diff-review"
+    if sub == "push":
+        return "git-publish"
+    if sub in {"fetch", "pull", "rebase", "merge", "cherry-pick", "am"}:
+        return "git-sync-integrate"
+    if sub in {
+        "add",
+        "commit",
+        "stash",
+        "reset",
+        "checkout",
+        "switch",
+        "restore",
+        "apply",
+        "rm",
+        "mv",
+        "clean",
+    }:
+        return "git-local-state-change"
+    if sub in {
+        "status",
+        "show",
+        "log",
+        "branch",
+        "tag",
+        "worktree",
+        "remote",
+        "rev-parse",
+        "describe",
+        "config",
+        "ls-files",
+        "blame",
+        "submodule",
+    }:
+        return "git-repo-inspect"
+    return ""
+
+
+_BRAVE_SEARCH_RE = re.compile(r"(?:^|\s|/)pi-skills/brave-search/search\.js\b")
+
+
 def _classify_bash_like(command: str, observation: str, is_error: bool) -> tuple[str, str]:
     action = _meaningful_shell_command(command)
     head = action.lower().splitlines()[0].strip() if action.strip() else ""
 
-    git_sub = ci._get_git_subcommand(action)
-    if git_sub in {
-        "diff",
-        "status",
-        "show",
-        "log",
-        "stash",
-        "push",
-        "pull",
-        "fetch",
-        "rebase",
-        "checkout",
-        "switch",
-        "add",
-        "commit",
-        "branch",
-        "tag",
-        "worktree",
-        "merge",
-        "reset",
-        "cherry-pick",
-    }:
-        if git_sub == "diff":
-            return "git-diff", action
-        if git_sub == "stash":
-            return "git-stash", action
-        return "git-status-log", action
+    # Pi-specific: brave-search skill path comes through the bash tool.
+    if _BRAVE_SEARCH_RE.search(action):
+        return "web-search", action
 
-    if head.startswith("gh "):
-        return "git-status-log", action
+    # Pi bash is the only way to start tmux or hit URLs; surface these
+    # rather than letting them fall through to bash-other.
+    if re.match(r"^tmux\b", head):
+        return "tmux-session", action
+    if re.match(r"^curl\b", head):
+        return "fetch-url", action
+
+    pi_git_intent = _classify_pi_git_intent(action)
+    if pi_git_intent:
+        return pi_git_intent, action
 
     if _contains_any(
         head,
@@ -417,7 +452,7 @@ def classify_file(path: str, phase_bins: int = 20) -> FileResult | None:
     if not trajectory:
         return None
 
-    hierarchical = ci.classify_hierarchical_layer(base_intents)
+    hierarchical = [f"{INTENT_TO_HIGH_LEVEL.get(intent, 'other')}.{intent}" for intent in base_intents]
     verify_outcomes = [
         ci.classify_verify_outcome(step.get("action", ""), step.get("observation", ""), base)
         for step, base in zip(trajectory, base_intents)

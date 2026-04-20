@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intent Classification Taxonomy</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121922;
+    --text: #e8eef5;
+    --muted: #9fb0c0;
+    --accent: #6cb6ff;
+    --border: #2a3645;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 20px 16px;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 600; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 0.9rem; }
+  #tree-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+    overflow-x: auto;
+  }
+  svg {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+  }
+  .node text {
+    font-size: 12px;
+    fill: var(--text);
+  }
+  .node--leaf text {
+    fill: var(--muted);
+    font-size: 11px;
+  }
+  .node--high text {
+    fill: var(--accent);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .node--root text {
+    fill: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .node circle {
+    fill: var(--panel);
+    stroke: var(--border);
+    stroke-width: 1.5px;
+    cursor: pointer;
+  }
+  .node--high > circle {
+    stroke: var(--accent);
+    fill: rgba(108,182,255,0.1);
+  }
+  .node--collapsed > circle {
+    fill: rgba(108,182,255,0.15);
+    stroke: var(--accent);
+  }
+  .link {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 1px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Intent Classification Taxonomy</h1>
+  <p>Three-level tree: high-level category &rarr; base intent &rarr; matched commands. Click a node to collapse/expand.</p>
+</header>
+<div id="tree-container"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const taxonomy = {
+  name: "all intents",
+  children: [
+    {
+      name: "read",
+      children: [
+        { name: "read-file-full", children: [
+          { name: "str_replace_editor view <file>" }
+        ]},
+        { name: "read-file-range", children: [
+          { name: "str_replace_editor view --view_range" }
+        ]},
+        { name: "read-file-full(truncated)", children: [
+          { name: "str_replace_editor view (file too large)" }
+        ]},
+        { name: "read-test-file", children: [
+          { name: "str_replace_editor view test_* / _test.* / conftest*" }
+        ]},
+        { name: "read-config-file", children: [
+          { name: "str_replace_editor view package.json / pytest.ini / setup.cfg / go.mod / Makefile" }
+        ]},
+        { name: "read-via-bash", children: [
+          { name: "cat" }, { name: "head" }, { name: "tail" },
+          { name: "sed -n" }, { name: "nl" }, { name: "awk" }
+        ]}
+      ]
+    },
+    {
+      name: "search",
+      children: [
+        { name: "view-directory", children: [
+          { name: "str_replace_editor view <directory>" }
+        ]},
+        { name: "list-directory", children: [
+          { name: "ls" }, { name: "tree" }, { name: "pwd" }
+        ]},
+        { name: "search-keyword", children: [
+          { name: "grep" }, { name: "rg" }, { name: "ag" }
+        ]},
+        { name: "search-files-by-name", children: [
+          { name: "find ... -name" }
+        ]},
+        { name: "search-files-by-content", children: [
+          { name: "find ... -exec grep" }, { name: "find | xargs grep" }
+        ]},
+        { name: "inspect-file-metadata", children: [
+          { name: "wc" }, { name: "file" }, { name: "stat" }
+        ]}
+      ]
+    },
+    {
+      name: "reproduce",
+      children: [
+        { name: "create-repro-script", children: [
+          { name: "str_replace_editor create repro* / reproduce* / demo*" }
+        ]},
+        { name: "run-repro-script", children: [
+          { name: "python repro*.py" }, { name: "python reproduce*.py" }
+        ]},
+        { name: "run-inline-snippet", children: [
+          { name: "python -c '...'" }, { name: "python - <<EOF" }, { name: "node -e '...'" }
+        ]}
+      ]
+    },
+    {
+      name: "edit",
+      children: [
+        { name: "edit-source", children: [
+          { name: "str_replace_editor str_replace <source_file>" }
+        ]},
+        { name: "insert-source", children: [
+          { name: "str_replace_editor insert" }
+        ]},
+        { name: "apply-patch", children: [
+          { name: "applypatch (GPT-specific)" }
+        ]},
+        { name: "create-file", children: [
+          { name: "str_replace_editor create <new_file>" }
+        ]}
+      ]
+    },
+    {
+      name: "verify",
+      children: [
+        { name: "run-test-suite", children: [
+          { name: "pytest" }, { name: "go test" }, { name: "npm test" },
+          { name: "npx jest" }, { name: "mocha" }, { name: "yarn test" },
+          { name: "python -m unittest" }
+        ]},
+        { name: "run-test-specific", children: [
+          { name: "pytest -k <pattern>" }, { name: "pytest <file>::<test>" }
+        ]},
+        { name: "create-test-script", children: [
+          { name: "str_replace_editor create test_* / *test.py / *test.js" }
+        ]},
+        { name: "run-verify-script", children: [
+          { name: "python verify*.py" }, { name: "python check*.py" },
+          { name: "python validate*.py" }, { name: "python edge_case*.py" }
+        ]},
+        { name: "create-verify-script", children: [
+          { name: "str_replace_editor create verify* / check* / validate*" }
+        ]},
+        { name: "edit-test-or-repro", children: [
+          { name: "str_replace_editor str_replace test_* / repro* / verify* / check*" }
+        ]},
+        { name: "run-custom-script", children: [
+          { name: "python <script>.py (no pattern match)" },
+          { name: "node <script>.js (no pattern match)" }
+        ]},
+        { name: "syntax-check", children: [
+          { name: "py_compile" }, { name: "compileall" }, { name: "node -c" }
+        ]},
+        { name: "compile-build", children: [
+          { name: "go build" }, { name: "go vet" }, { name: "make" },
+          { name: "npx tsc" }, { name: "tsc" }, { name: "npm run build" }, { name: "yarn build" }
+        ]}
+      ]
+    },
+    {
+      name: "git",
+      children: [
+        { name: "git-diff", children: [
+          { name: "git diff" }
+        ]},
+        { name: "git-inspect", children: [
+          { name: "git status" }, { name: "git show" }, { name: "git log" }
+        ]},
+        { name: "git-stash", children: [
+          { name: "git stash" }
+        ]}
+      ]
+    },
+    {
+      name: "housekeeping",
+      children: [
+        { name: "file-cleanup", children: [
+          { name: "rm" }, { name: "mv" }, { name: "cp" }, { name: "chmod" }
+        ]},
+        { name: "create-documentation", children: [
+          { name: "str_replace_editor create *summary* / *readme* / *changes* / *implementation*" }
+        ]},
+        { name: "start-service", children: [
+          { name: "redis-server" }, { name: "redis-cli" }, { name: "mongod" }, { name: "sleep" }
+        ]},
+        { name: "install-deps", children: [
+          { name: "pip install" }, { name: "pip list" }, { name: "npm install" },
+          { name: "go get" }, { name: "apt" }
+        ]},
+        { name: "check-tool-exists", children: [
+          { name: "which" }, { name: "type" }
+        ]}
+      ]
+    },
+    {
+      name: "failed",
+      children: [
+        { name: "search-keyword(failed)", children: [
+          { name: "grep / find (shell error)" }
+        ]},
+        { name: "read-via-bash(failed)", children: [
+          { name: "cat / head / sed (shell error)" }
+        ]},
+        { name: "run-script(failed)", children: [
+          { name: "python / node (shell error)" }
+        ]},
+        { name: "run-test-suite(failed)", children: [
+          { name: "pytest / test runner (shell error)" }
+        ]},
+        { name: "bash-command(failed)", children: [
+          { name: "other bash (shell error)" }
+        ]}
+      ]
+    },
+    {
+      name: "other",
+      children: [
+        { name: "submit", children: [
+          { name: "submit" }
+        ]},
+        { name: "empty", children: [
+          { name: "(empty action — rate limit / context exit)" }
+        ]},
+        { name: "echo", children: [
+          { name: "echo" }, { name: "printf" }
+        ]},
+        { name: "bash-other", children: [
+          { name: "(unclassified bash)" }
+        ]},
+        { name: "undo-edit", children: [
+          { name: "str_replace_editor undo_edit" }
+        ]}
+      ]
+    }
+  ]
+};
+
+// Determine depth of each node for styling
+function assignDepth(node, depth = 0) {
+  node._depth = depth;
+  if (node.children) node.children.forEach(c => assignDepth(c, depth + 1));
+}
+assignDepth(taxonomy);
+
+const margin = { top: 30, right: 200, bottom: 30, left: 100 };
+const nodeHeight = 18;
+
+// Count total leaf nodes to size the SVG
+function countLeaves(node) {
+  if (!node.children) return 1;
+  return node.children.reduce((s, c) => s + countLeaves(c), 0);
+}
+const totalLeaves = countLeaves(taxonomy);
+const height = totalLeaves * nodeHeight + margin.top + margin.bottom;
+const width = 1160;
+
+const svg = d3.select("#tree-container")
+  .append("svg")
+  .attr("width", width)
+  .attr("height", height);
+
+const g = svg.append("g")
+  .attr("transform", `translate(${margin.left},${margin.top})`);
+
+const treeLayout = d3.tree()
+  .size([height - margin.top - margin.bottom, width - margin.left - margin.right])
+  .separation((a, b) => a.parent === b.parent ? 1 : 1.2);
+
+const root = d3.hierarchy(taxonomy);
+treeLayout(root);
+
+// Draw links
+g.selectAll(".link")
+  .data(root.links())
+  .join("path")
+  .attr("class", "link")
+  .attr("d", d3.linkHorizontal()
+    .x(d => d.y)
+    .y(d => d.x)
+  );
+
+// Draw nodes
+const node = g.selectAll(".node")
+  .data(root.descendants())
+  .join("g")
+  .attr("class", d => {
+    let cls = "node";
+    if (d.data._depth === 0) cls += " node--root";
+    else if (d.data._depth === 1) cls += " node--high";
+    else if (!d.children) cls += " node--leaf";
+    return cls;
+  })
+  .attr("transform", d => `translate(${d.y},${d.x})`);
+
+node.append("circle")
+  .attr("r", d => d.data._depth === 0 ? 5 : d.data._depth === 1 ? 4 : d.children ? 3.5 : 2.5);
+
+node.append("text")
+  .attr("dy", "0.35em")
+  .attr("x", d => d.children ? -10 : 8)
+  .attr("text-anchor", d => d.children ? "end" : "start")
+  .text(d => d.data.name);
+
+// Click to collapse/expand
+node.filter(d => d.data._depth < 3 && d.children)
+  .style("cursor", "pointer")
+  .on("click", function(event, d) {
+    if (d._children) {
+      d.children = d._children;
+      d._children = null;
+    } else if (d.children) {
+      d._children = d.children;
+      d.children = null;
+    }
+    update();
+  });
+
+function update() {
+  // Recount leaves for new height
+  function visibleLeaves(node) {
+    if (!node.children) return 1;
+    return node.children.reduce((s, c) => s + visibleLeaves(c), 0);
+  }
+  const newLeaves = visibleLeaves(root);
+  const newHeight = newLeaves * nodeHeight + margin.top + margin.bottom;
+
+  svg.attr("height", newHeight);
+  treeLayout.size([newHeight - margin.top - margin.bottom, width - margin.left - margin.right]);
+  treeLayout(root);
+
+  // Update links
+  const links = g.selectAll(".link").data(root.links(), d => d.target.data.name);
+  links.exit().remove();
+  links.enter().append("path").attr("class", "link")
+    .merge(links)
+    .transition().duration(300)
+    .attr("d", d3.linkHorizontal().x(d => d.y).y(d => d.x));
+
+  // Update nodes
+  const nodes = g.selectAll(".node").data(root.descendants(), d => d.data.name);
+  nodes.exit().remove();
+
+  const enter = nodes.enter().append("g")
+    .attr("class", d => {
+      let cls = "node";
+      if (d.data._depth === 0) cls += " node--root";
+      else if (d.data._depth === 1) cls += " node--high";
+      else if (!d.children && !d._children) cls += " node--leaf";
+      return cls;
+    });
+
+  enter.append("circle")
+    .attr("r", d => d.data._depth === 0 ? 5 : d.data._depth === 1 ? 4 : (d.children || d._children) ? 3.5 : 2.5);
+
+  enter.append("text")
+    .attr("dy", "0.35em")
+    .attr("x", d => (d.children || d._children) ? -10 : 8)
+    .attr("text-anchor", d => (d.children || d._children) ? "end" : "start")
+    .text(d => d.data.name);
+
+  enter.filter(d => d.data._depth < 3 && (d.children || d._children))
+    .style("cursor", "pointer")
+    .on("click", function(event, d) {
+      if (d._children) {
+        d.children = d._children;
+        d._children = null;
+      } else if (d.children) {
+        d._children = d.children;
+        d.children = null;
+      }
+      update();
+    });
+
+  const merged = enter.merge(nodes);
+  merged.transition().duration(300)
+    .attr("transform", d => `translate(${d.y},${d.x})`);
+
+  // Mark collapsed nodes
+  merged.select("circle")
+    .classed("node--collapsed", d => !!d._children);
+  merged.classed("node--collapsed", d => !!d._children);
+}
+</script>
+</body>
+</html>
