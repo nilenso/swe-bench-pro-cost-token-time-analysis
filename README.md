@@ -1,144 +1,100 @@
-# SWE-Bench Pro Analysis: GPT-5 vs Claude Sonnet 4.5
+# Coding-agent trajectory analysis
 
-This repository is the **data + methodology deep dive** behind the SWE-Bench Pro operating-profile analysis (cost, tokens, tool time, and behavior), not just a headline benchmark comparison.
+This repo backs two related blog-post threads:
 
-It is designed so you can:
+1. **SWE-Bench Pro operating-profile analysis** — cost, tokens, tool time, and paired task comparisons.
+2. **Trajectory-shape analysis** — workflow patterns, intent frequencies, and reference tables across both SWE-Bench Pro and Pi transcripts.
 
-- reproduce paired-task analysis from raw trajectories,
-- inspect exactly how metrics are computed,
-- verify caveats (especially token accounting),
-- and regenerate all report variants used in the write-up.
+If you landed here from a blog post, start with the published HTMLs in `docs/`. Those are the canonical reader-facing artifacts.
 
 ---
 
-## What this repo answers
+## Start here
 
-Beyond resolve rate, this analysis focuses on:
+### Trajectory shapes / intent analysis
 
-1. **Cost per task** (from benchmark logs),
-2. **Token usage patterns** (input, output, total),
-3. **Tool execution time** (not full wall-clock),
-4. **Agent behavior** (steps/actions/content volume),
-5. **Paired per-task comparisons** (Sonnet 4.5 / GPT-5 ratios).
+#### SWE-Bench Pro
+- [Analytics — all 4 models](docs/analytics.html)
+- [Analytics — Sonnet 4.5 vs GPT-5](docs/analytics-sonnet-gpt5.html)
+- [Reference tables — all 4 models](docs/reference.html)
+- [Reference tables — Sonnet 4.5 vs GPT-5](docs/reference-sonnet-gpt5.html)
 
-The central design choice is **pairing**: compare models only on instances where both submitted on the same task.
+#### Pi transcripts
+- [Analytics — all available Pi models](docs/pi-analytics.html)
+- [Analytics — Opus 4.5/4.6 vs GPT-5.4](docs/pi-analytics-opus-gpt54.html)
+- [Reference tables — all available Pi models](docs/pi-references.html)
+- [Reference tables — Opus 4.5/4.6 vs GPT-5.4](docs/pi-references-opus-gpt54.html)
 
----
+#### Shared appendix / viewers
+- [Trajectory sequence viewer](docs/trajectory-sequences.html)
+- [Intent taxonomy tree](docs/intent-taxonomy.html)
+- [Intent classification rules (SWE-Agent)](docs/intent-classification-rules.md)
+- [Intent classification rules (Pi)](docs/pi-intent-classification-rules.md)
 
-## Dataset and scope
-
-- Benchmark: **SWE-Bench Pro** public trajectories
-- Models: **GPT-5** and **Claude Sonnet 4.5**
-- Run slice: October 2025 leaderboard runs
-- Raw trajectories: ~1460 total (730 per model)
-- Paired submitted tasks used in main comparisons: **616**
-
-Data sources:
-
-- S3 trajectories/evals under `s3://scaleapi-results/swe-bench-pro/`
-- Eval result maps from `scaleapi/SWE-bench_Pro-os`
-
-See `RESEARCH_NOTES.md` for full provenance details.
-
----
-
-## Repository map
-
-### Core scripts
-
-- `scripts/extract_stats_fast.py` — parallel extractor (orjson + multiprocessing)
-- `scripts/extract_stats.py` — reference extractor (single-process)
-- `scripts/build_report.py` — builds main interactive report (`report.html`)
-- `scripts/build_text_report.py` — builds plain-text summary (`report.txt`)
-- `scripts/build_unsubmitted_report.py` — analysis of non-submitted cases
-- `scripts/build_report_parity.py` — parity scatter report variant
-- `scripts/build_white_ratio_charts.py` — white editorial ratio chart page
-
-### Templates
-
-- `scripts/report_template.html` — main report template
-- `scripts/report_template_parity.html` — parity report template
-
-### Methodology docs
-
-- `RESEARCH_NOTES.md` — long-form research notes, caveats, source context
-- `docs/intent-classification-rules.md` — deterministic command-level intent taxonomy
-
-### Generated artifacts
-
-- `report.html` / `docs/index.html` — main interactive report
-- `report_parity.html` / `docs/parity.html` — parity scatter variant
-- `ratio-charts-white.html` / `docs/ratio-charts-white.html` — publication-style ratio charts
-- `unsubmitted.html` / `docs/unsubmitted.html` — non-submission analysis
-- `report.txt` / `docs/report.txt` — text summary for quick review/agents
+### Cost / token / time analysis
+- [Main interactive report](docs/index.html)
+- [Parity scatter variant](docs/parity.html)
+- [White ratio charts](docs/ratio-charts-white.html)
+- [Unsubmitted-task report](docs/unsubmitted.html)
+- [Text summary](docs/report.txt)
 
 ---
 
-## Methodology (important)
+## Repo layout
 
-### 1) Pairing and filtering
+The repo is intentionally split by responsibility:
 
-- Group by `instance_id`.
-- Keep only tasks with both model trajectories present.
-- For paired analyses, require both to have `submitted=true`.
-- This avoids cross-task composition bias from comparing different task subsets.
+- `analysis/` — reusable SWE-Bench Pro analysis package
+  - ingestion, classification, aggregation, failure-mode helpers
+- `analysis_pi/` — reusable Pi transcript analysis package
+  - session filtering, classification, aggregation, user-message analysis
+- `scripts/` — thin entrypoints and HTML builders
+  - `build_*.py` page generators
+  - `extract_stats*.py` cost/token/time extraction
+- `docs/` — committed, published outputs
+  - this is the canonical location for rendered HTMLs linked above
+- `generated/` — local scratch outputs created by build scripts
+  - not committed
+- `data/` — downloaded benchmark and Pi transcript inputs
 
-### 2) Ratio convention
-
-All per-task ratio charts use:
-
-- **ratio = Sonnet 4.5 / GPT-5**
-- `1×` = equal
-- `<1×` means Sonnet is lower
-- `>1×` means Sonnet is higher
-
-### 3) Metric definitions
-
-From each trajectory:
-
-- **Cost:** `info.model_stats.instance_cost`
-- **Input tokens:** `info.model_stats.tokens_sent`
-- **API calls:** `info.model_stats.api_calls`
-- **Tool time:** sum/stats of `trajectory[].execution_time`
-- **Steps:** `len(trajectory)`
-
-Derived/additional fields (extractor):
-
-- **Output tokens (recounted):** `output_tokens.total`
-  - counted with `tiktoken` (`cl100k_base`) over:
-    - `message.content`
-    - `message.thought` (if distinct)
-    - `tool_calls[].function.arguments`
-- **Action breakdown:** bash/view/edit/create/search/submit/other
-- **Content volume:** observation/action/thought/response char totals
-
-### 4) Aggregation style
-
-- Use **per-task ratios** first, then summarize with **median + IQR**.
-- Do not infer direction from pooled means alone (heavy tails can mislead).
-
-### 5) Outcome decomposition
-
-Paired outcomes are split into:
-
-- both solved,
-- GPT-only solved,
-- Sonnet-only solved,
-- neither solved.
-
-This is used alongside headline resolve rates.
+In short: **analysis logic lives in `analysis*/`, page-building entrypoints live in `scripts/`, published artifacts live in `docs/`.**
 
 ---
 
-## Critical caveats
+## What each analysis family answers
 
-1. **`tokens_received` undercounts output** in upstream SWE-Agent context because it does not fully account for tool-call arguments.
-   - This is why recounted `output_tokens.total` exists in extracted stats.
-2. **Costs are benchmark-environment proxy costs** (litellm path), not guaranteed to match current public list pricing.
-3. **Tool time is not full wall-clock latency**; model inference latency is not directly captured.
-4. **Hidden reasoning tokens are not visible** in trajectories.
+### 1) SWE-Bench Pro operating profile
+Focuses on paired-task comparisons for October 2025 benchmark runs:
 
-For caveat details and links, see `RESEARCH_NOTES.md`.
+- cost per task
+- input / output / total token behavior
+- tool execution time
+- steps, actions, and content volume
+- paired Sonnet 4.5 / GPT-5 ratios
+
+Main methodology notes live in:
+
+- [`RESEARCH_NOTES.md`](RESEARCH_NOTES.md)
+- [`scripts/extract_stats_fast.py`](scripts/extract_stats_fast.py)
+- [`scripts/report_template.html`](scripts/report_template.html)
+
+### 2) Trajectory shapes / intent taxonomy
+Focuses on workflow structure rather than only success rate:
+
+- high-level action frequencies
+- low-level intent frequencies
+- trajectory-shape phase profiles
+- deterministic intent taxonomies
+- cross-harness comparison between SWE-Agent and Pi
+
+Main source files:
+
+- [`analysis/`](analysis)
+- [`analysis_pi/`](analysis_pi)
+- [`scripts/build_analytics.py`](scripts/build_analytics.py)
+- [`scripts/build_reference_tables.py`](scripts/build_reference_tables.py)
+- [`scripts/build_pi_analytics.py`](scripts/build_pi_analytics.py)
+- [`scripts/build_pi_reference_tables.py`](scripts/build_pi_reference_tables.py)
 
 ---
 
@@ -147,42 +103,47 @@ For caveat details and links, see `RESEARCH_NOTES.md`.
 ### Prerequisites
 
 - Python 3.10+
-- AWS CLI (for S3 download)
+- AWS CLI
 - Python deps:
 
 ```bash
 pip install orjson tiktoken
 ```
 
-### Download data
+### Download benchmark data
 
 ```bash
 bash download.sh
 ```
 
-This downloads both model directories into `data/gpt5` and `data/claude45`.
+This populates `data/gpt5/` and `data/claude45/`.
 
-### Run full pipeline
+---
+
+## Build the cost / token / time report set
 
 ```bash
 ./run_analysis.sh
 ```
 
-Outputs:
+This writes:
 
-- `stats.json`
-- `report.html`
-- `report.txt`
-- `unsubmitted.html`
-- `docs/index.html` + related docs copies
+- local scratch outputs to `generated/`
+- published copies to `docs/`
 
-Open report:
+Key outputs:
+
+- `docs/index.html`
+- `docs/unsubmitted.html`
+- `docs/report.txt`
+
+Open the local build:
 
 ```bash
 ./run_analysis.sh --open
 ```
 
-Optional workers:
+Use fewer workers if needed:
 
 ```bash
 ./run_analysis.sh -w 8
@@ -190,61 +151,97 @@ Optional workers:
 
 ---
 
-## Build optional report variants
+## Build trajectory-shape / reference pages
 
-### Parity scatter report
+### SWE-Bench Pro analytics
 
 ```bash
-python3 scripts/build_report_parity.py stats.json -o report_parity.html
-cp report_parity.html docs/parity.html
+python3 scripts/build_analytics.py --data-root data --output docs/analytics.html
+python3 scripts/build_analytics.py --data-root data --models claude45,gpt5 --output docs/analytics-sonnet-gpt5.html
 ```
 
-### White ratio charts page
+### SWE-Bench Pro reference tables
 
 ```bash
+python3 scripts/build_reference_tables.py --data-root data --output docs/reference.html
+python3 scripts/build_reference_tables.py --data-root data --models claude45,gpt5 --output docs/reference-sonnet-gpt5.html
+```
+
+### Pi analytics
+
+All available Pi models:
+
+```bash
+python3 scripts/build_pi_analytics.py --data-root data/pi-mono --output docs/pi-analytics.html
+```
+
+Opus 4.5/4.6 vs GPT-5.4:
+
+```bash
+python3 scripts/build_pi_analytics.py \
+  --data-root data/pi-mono \
+  --models claude-opus-4-5 claude-opus-4-6 gpt-5.4 \
+  --merge-models claude-opus-4-5,claude-opus-4-6=claude-opus-4-5-6:Opus\ 4.5/4.6 \
+  --output docs/pi-analytics-opus-gpt54.html
+```
+
+### Pi reference tables
+
+All available Pi models:
+
+```bash
+python3 scripts/build_pi_reference_tables.py --data-root data/pi-mono --output docs/pi-references.html
+```
+
+Opus 4.5/4.6 vs GPT-5.4:
+
+```bash
+python3 scripts/build_pi_reference_tables.py \
+  --data-root data/pi-mono \
+  --models claude-opus-4-5 claude-opus-4-6 gpt-5.4 \
+  --merge-models claude-opus-4-5,claude-opus-4-6=claude-opus-4-5-6:Opus\ 4.5/4.6 \
+  --output docs/pi-references-opus-gpt54.html
+```
+
+### Other supporting pages
+
+```bash
+python3 scripts/build_report_parity.py stats.json -o docs/parity.html
 python3 scripts/build_white_ratio_charts.py stats.json -o docs/ratio-charts-white.html
-cp docs/ratio-charts-white.html ratio-charts-white.html
+python3 scripts/build_trajectory_sequence_viewer.py --output docs/trajectory-sequences.html
 ```
 
 ---
 
-## Notes on token metrics across artifacts
+## Notes on methodology
 
-Different artifacts may intentionally show different token views:
+### Pairing policy
+For the cost / token / time analysis, the main paired comparisons require:
 
-- Main report/parity pages emphasize extracted metrics including recounted output-token fields.
-- White ratio charts currently include input/output/total views from run-stat fields used in that page builder.
+- same `instance_id`
+- both model trajectories present
+- both trajectories submitted
 
-If you are validating token-accounting caveats, always check field provenance in:
+This avoids cross-task composition bias.
 
-- `scripts/extract_stats_fast.py`
-- report template metric definitions
-- `RESEARCH_NOTES.md`
+### Ratio convention
+Where ratio charts are used:
 
----
+- **ratio = Sonnet 4.5 / GPT-5**
+- `1×` = equal
+- `<1×` means Sonnet is lower
+- `>1×` means Sonnet is higher
 
-## Session-derived evolution (from Pi coding sessions)
+### Token caveat
+`tokens_received` from upstream SWE-Agent undercounts some output, especially tool-call arguments. Use the recounted `output_tokens.total` fields when validating token-accounting conclusions.
 
-Reviewing all repo sessions (via `pi` session transcripts) surfaced a few decisions that materially changed results and interpretation:
-
-1. **Method baseline was locked early** in `RESEARCH_NOTES.md` (token-accounting caveats, pricing caveats, measurement limits).
-2. **Pairing policy switched to “both submitted”** (instead of “both resolved”) to reduce survivorship bias in efficiency comparisons.
-3. **Extraction was rebuilt for full-run iteration speed** (`scripts/extract_stats_fast.py`: orjson + multiprocessing + progress).
-4. **A key eval-mapping bug was fixed** (model eval maps were colliding by identical instance IDs), which changed reported resolve-rate comparisons.
-5. **Report generator was split into data + template layers** (`scripts/build_report.py` + `scripts/report_template.html`) to make visualization iteration safer.
-6. **Variant visual products were added** for paired interpretability:
-   - parity scatter report (`build_report_parity.py`, `report_template_parity.html`),
-   - white publication-style ratio page (`build_white_ratio_charts.py`).
-7. **Token interpretation was explicitly tightened**: `input + output` is useful but not equal to full billed token load in all cases.
-
-This repo keeps all those artifacts side-by-side so readers can audit decisions, not just final charts.
+For details, see [`RESEARCH_NOTES.md`](RESEARCH_NOTES.md).
 
 ---
 
 ## Related writing
 
-Companion blog post (published separately):
+- Blog post: **Checking my model vibes against SWE-Bench Pro**
+- Blog post: **Trajectory shapes**
 
-- **Checking my model vibes against SWE-Bench Pro**
-
-This repo is the technical appendix + reproducibility base for that narrative.
+This repo is the technical appendix and source-material base for both.

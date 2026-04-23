@@ -35,6 +35,9 @@ def build_payload(data_root: Path, models: list[str] | None = None) -> dict:
 
 def render_html(payload: dict) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
+    model_count = len(payload.get("models", []))
+    subtitle = f"SWE-Bench Pro — {model_count}-model comparison" if model_count else "SWE-Bench Pro"
+    intent_desc = "Frequency per 100 steps, compared across the selected models."
 
     return f"""<!doctype html>
 <html>
@@ -344,7 +347,7 @@ def render_html(payload: dict) -> str:
 <body>
 <div class="container">
   <h1>Trajectory Analytics</h1>
-  <div class="subtitle">SWE-Bench Pro &mdash; multi-model comparison</div>
+  <div class="subtitle">{subtitle}</div>
 
   <div class="legend" id="topLegend"></div>
 
@@ -355,7 +358,7 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>2. Intent Comparison</h2>
-  <p class="chart-desc">Frequency per 100 steps, compared across all models.</p>
+  <p class="chart-desc">{intent_desc}</p>
   <div class="filter-control">
     <label for="intentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="intentMaxVValue">1.5</span> per 100 steps</label>
     <input id="intentMaxVSlider" type="range" min="0" max="5" step="0.1" value="1.5" />

@@ -402,6 +402,17 @@ def build_payload(
 
 def render_html(payload: dict) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
+    model_count = len(payload.get("models", []))
+    subtitle = (
+        f"Pi transcript sessions — strict single-model issue sessions across {model_count} models"
+        if model_count
+        else "Pi transcript sessions"
+    )
+    intent_desc = (
+        "Frequency per 100 steps, compared across the selected models. "
+        "For Pi, the git rows use a more semantic sub-taxonomy: GitHub context, repo inspection, "
+        "diff review, sync/integrate, local state change, and publish."
+    )
 
     return f"""<!doctype html>
 <html>
@@ -755,7 +766,7 @@ def render_html(payload: dict) -> str:
 <body>
 <div class="container">
   <h1>Trajectory Analytics</h1>
-  <div class="subtitle">Pi transcript sessions &mdash; configurable session filter, currently strict single-model issue sessions</div>
+  <div class="subtitle">{subtitle}</div>
 
   <div class="legend" id="topLegend"></div>
 
@@ -766,7 +777,7 @@ def render_html(payload: dict) -> str:
   </div>
 
   <h2>2. Intent Comparison</h2>
-  <p class="chart-desc">Frequency per 100 steps, compared across all models. For Pi, the git rows use a more semantic sub-taxonomy: GitHub context, repo inspection, diff review, sync/integrate, local state change, and publish.</p>
+  <p class="chart-desc">{intent_desc}</p>
   <p class="chart-desc" id="issueIntentDesc"></p>
   <div class="filter-control">
     <label for="issueIntentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="issueIntentMaxVValue">0.0</span> per 100 steps</label>

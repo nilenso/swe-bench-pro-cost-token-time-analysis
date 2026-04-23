@@ -18,8 +18,8 @@ inspect-file-metadata,search,wc / stat,1.94,1.44,0.06,1.94,0.41,0.27
 create-file,edit,create file,1.29,1.29,0.97,0.46,0.49,0.54
 git-diff-review,git,diff review,1.12,0.77,1.09,1.12,0.25,0.94
 search-files-by-name,search,find by filename,2.14,0.85,0.89,0.61,0.41,2.14
-read-via-bash,read,cat / head / tail,1.86,0.35,1.86,0.00,0.00,1.47
 run-test-specific,verify,pytest -k / :: (targeted),1.61,1.27,0.31,0.77,0.08,1.61
+read-via-bash,read,cat / head / tail,1.86,0.35,1.86,0.00,0.00,1.47
 run-custom-script,verify,run custom script,0.94,0.70,0.69,0.31,0.00,0.94
 read-config-file,read,view config file,0.74,0.70,0.51,0.31,0.74,0.13
 run-test-suite,verify,pytest / go test (broad),1.23,0.05,1.23,0.10,0.41,0.27
@@ -27,22 +27,22 @@ file-cleanup,housekeeping,rm / mv / cp,0.69,0.42,0.69,0.26,0.08,0.13
 web-search,search,web search,1.74,0.12,0.06,1.74,0.08,0.00
 fetch-url,other,curl / http,0.92,0.02,0.54,0.92,0.00,0.27
 edit-source(failed),failed,edit source (failed),0.74,0.42,0.03,0.15,0.74,0.54
-read-file-failed,failed,read (failed),0.58,0.25,0.31,0.15,0.58,0.13
 create-test-script,verify,write test file,0.40,0.32,0.17,0.36,0.25,0.40
+read-file-failed,failed,read (failed),0.58,0.25,0.31,0.15,0.58,0.13
 bash-command(failed),failed,bash (shell error),0.35,0.35,0.26,0.15,0.00,0.27
 install-deps,housekeeping,pip install / npm install,0.66,0.00,0.49,0.10,0.66,0.13
 search-files-by-content,search,find | grep,0.71,0.05,0.71,0.00,0.00,0.00
-run-inline-snippet,verify,python -c / node -e,0.45,0.45,0.06,0.10,0.08,0.00
 create-file-via-inline-script,edit,inline create-file snippet,0.47,0.47,0.09,0.05,0.00,0.00
+run-inline-snippet,verify,python -c / node -e,0.45,0.45,0.06,0.10,0.08,0.00
 echo,other,echo / printf,0.25,0.25,0.23,0.05,0.08,0.00
 tmux-session,housekeeping,tmux,0.27,0.27,0.03,0.00,0.00,0.00
 run-repro-script,reproduce,run repro script,0.20,0.17,0.00,0.20,0.00,0.00
 edit-test-or-repro(failed),failed,edit test/repro (failed),0.20,0.20,0.06,0.05,0.00,0.00
-read-via-inline-script,read,inline read snippet,0.25,0.25,0.00,0.00,0.00,0.00
 run-script(failed),failed,python/node (shell error),0.20,0.20,0.00,0.10,0.00,0.00
 create-repro-script,reproduce,write repro script,0.17,0.17,0.00,0.15,0.00,0.00
+read-via-inline-script,read,inline read snippet,0.25,0.25,0.00,0.00,0.00,0.00
 search-keyword(failed),failed,grep/find (shell error),0.13,0.05,0.00,0.10,0.08,0.13
 start-service,housekeeping,"start service (redis, etc.)",0.07,0.07,0.03,0.00,0.00,0.00
 edit-via-inline-script,edit,inline edit snippet,0.07,0.07,0.00,0.00,0.00,0.00
-create-documentation,housekeeping,write docs file,0.02,0.02,0.00,0.00,0.00,0.00
 submit,other,submit patch,0.08,0.00,0.00,0.00,0.08,0.00
+create-documentation,housekeeping,write docs file,0.02,0.02,0.00,0.00,0.00,0.00

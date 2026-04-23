@@ -24,9 +24,13 @@ done
 TRAJ_DIRS="data/gpt5/traj data/claude45/traj"
 EVAL_FILES="data/gpt5/traj:eval_results_gpt5.json data/claude45/traj:eval_results_claude45.json"
 STATS_FILE="stats.json"
-REPORT_FILE="report.html"
-UNSUB_FILE="unsubmitted.html"
+GENERATED_DIR="generated"
+REPORT_FILE="$GENERATED_DIR/report.html"
+TEXT_REPORT_FILE="$GENERATED_DIR/report.txt"
+UNSUB_FILE="$GENERATED_DIR/unsubmitted.html"
 DOCS_DIR="docs"
+
+mkdir -p "$GENERATED_DIR" "$DOCS_DIR"
 
 echo "═══ SWE-Bench Pro Analysis Pipeline ═══"
 echo ""
@@ -46,26 +50,26 @@ echo ""
 
 # Step 3: Build plain text report (for AI agents)
 echo "▸ Step 3: Build plain text report"
-python3 scripts/build_text_report.py "$STATS_FILE" -o report.txt
+python3 scripts/build_text_report.py "$STATS_FILE" -o "$TEXT_REPORT_FILE"
 echo ""
 
 # Step 4: Build unsubmitted report
-echo "▸ Step 3: Build unsubmitted report"
+echo "▸ Step 4: Build unsubmitted report"
 PAIRED=$(python3 -c "import json; d=json.load(open('$STATS_FILE')); print(len(d))")
 python3 scripts/build_unsubmitted_report.py "$STATS_FILE" -o "$UNSUB_FILE" --paired-count "$PAIRED"
 echo ""
 
-# Step 5: Copy to docs/ for GitHub Pages
-mkdir -p "$DOCS_DIR"
+# Step 5: Copy published artifacts to docs/
+echo "▸ Step 5: Copy published artifacts to docs/"
 cp "$REPORT_FILE" "$DOCS_DIR/index.html"
 cp "$UNSUB_FILE" "$DOCS_DIR/unsubmitted.html"
-cp report.txt "$DOCS_DIR/report.txt"
+cp "$TEXT_REPORT_FILE" "$DOCS_DIR/report.txt"
 echo ""
 
 echo "═══ Done ═══"
 echo "  Stats: $STATS_FILE"
-echo "  Report: $REPORT_FILE"
-echo "  GH Pages: $DOCS_DIR/index.html"
+echo "  Local report: $REPORT_FILE"
+echo "  Published report: $DOCS_DIR/index.html"
 echo "  Open: file://$(pwd)/$REPORT_FILE"
 
 if $OPEN; then

@@ -8,6 +8,16 @@ stats.json
 partial_stats.json
 sample_stats.json
 
+# Local generated reports (published copies live in docs/)
+generated/
+report.html
+report_parity.html
+unsubmitted.html
+ratio-charts-white.html
+pi-analytics.html
+pi-references.html
+report.txt
+
 # Python
 __pycache__/
 *.pyc
