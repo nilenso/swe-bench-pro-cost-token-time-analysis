@@ -28,6 +28,7 @@ from analysis.models import (
     HIGH_LEVEL_COLORS,
 )
 from analysis.failure_modes import FAMILY_COLOR
+from analysis.classify import SEQUENCE_VERIFY_INTENTS
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -233,164 +234,178 @@ def render_structure_sections(results, models) -> list[tuple[str, str, str]]:
     ))
 
     # ── Section 10: Structural Markers ───────────────────────
-    marker_keys = ["first_edit", "last_edit", "first_verify", "first_verify_pass", "submit"]
-    marker_display = {
-        "first_edit": "first edit",
-        "last_edit": "last edit",
-        "first_verify": "first verify",
-        "first_verify_pass": "first pass",
-        "submit": "submit",
-    }
-    # Marker shapes: distinct visual identity via CSS
-    # Circles, diamonds, squares via border-radius and rotation
     marker_styles = {
         "first_edit":        "width:8px;height:8px;border-radius:50%",                                # circle
         "last_edit":         "width:8px;height:8px;border-radius:50%;border:2px solid {color};background:#fffff8",  # hollow circle
         "first_verify":      "width:7px;height:7px;border-radius:1px;transform:rotate(45deg)",        # diamond
-        "first_verify_pass": "width:8px;height:8px;border-radius:1px",                                # square
+        "first_verify_pass": "width:8px;height:8px;border-radius:1px",                                # filled square
+        "last_verify":       "width:8px;height:8px;border-radius:1px;border:2px solid {color};background:#fffff8",  # hollow square
         "submit":            "width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid {color}", # triangle
     }
 
-    # Compute median positions per model
-    marker_data = {}  # model -> {marker_key -> {med, p25, p75, n}}
-    for model in models:
-        marker_data[model] = {}
-        for mk in marker_keys:
-            vals = [r.positions[mk] for r in results[model]
-                    if r.positions.get(mk) is not None]
-            marker_data[model][mk] = {
-                "med": _median_safe(vals),
-                "p25": _p25(vals),
-                "p75": _p75(vals),
-                "n": len(vals),
-            }
+    def render_marker_variant(marker_keys, marker_display, intro_html="", marker_style_overrides=None):
+        def marker_position(r, mk):
+            pos = r.positions.get(mk)
+            if pos is not None:
+                return pos
+            if mk != "last_verify":
+                return None
+            n = len(r.base_intents)
+            idx = next((i for i in range(n - 1, -1, -1) if r.base_intents[i] in SEQUENCE_VERIFY_INTENTS), -1)
+            return round(idx / max(n - 1, 1) * 100, 1) if idx >= 0 else None
 
-    # Data table
-    headers = ["marker"]
-    for m in models:
-        headers.extend([f"{m}_med", f"{m}_p25", f"{m}_p75", f"{m}_n"])
-    tbl_rows = []
-    for mk in marker_keys:
-        row = [mk]
+        style_map = dict(marker_styles)
+        if marker_style_overrides:
+            style_map.update(marker_style_overrides)
+
+        marker_data = {}
         for model in models:
-            d = marker_data[model][mk]
-            row.extend([d["med"], d["p25"], d["p75"], d["n"]])
-        tbl_rows.append(row)
-    table_html_10 = _html_table(headers, tbl_rows)
+            marker_data[model] = {}
+            for mk in marker_keys:
+                vals = [pos for r in results[model] if (pos := marker_position(r, mk)) is not None]
+                marker_data[model][mk] = {
+                    "med": _median_safe(vals),
+                    "p25": _p25(vals),
+                    "p75": _p75(vals),
+                    "n": len(vals),
+                }
 
-    # Timeline visualization
-    track_width = 560  # px
-    timeline_html = '<div style="margin:20px 0 16px 0">'
-
-    # Marker legend
-    timeline_html += '<div style="display:flex;gap:16px;margin-bottom:14px;font-size:11px;color:#555">'
-    for mk in marker_keys:
-        style = marker_styles[mk].replace("{color}", "#888")
-        # For the hollow circle and triangle, we need special handling
-        if mk == "last_edit":
-            swatch = (
-                f'<span style="display:inline-block;{style};box-sizing:border-box"></span>'
-            )
-        elif mk == "submit":
-            swatch = (
-                f'<span style="display:inline-block;{style}"></span>'
-            )
-        else:
-            swatch = (
-                f'<span style="display:inline-block;{style};background:#888"></span>'
-            )
-        timeline_html += (
-            f'<span style="display:inline-flex;align-items:center;gap:4px">'
-            f'{swatch} {marker_display[mk]}</span>'
-        )
-    timeline_html += '</div>'
-
-    # Scale header
-    timeline_html += (
-        f'<div style="display:grid;grid-template-columns:100px {track_width}px;'
-        f'gap:8px;margin-bottom:2px">'
-        f'<div></div>'
-        f'<div style="position:relative;height:14px;font-size:9px;color:#999">'
-    )
-    for tick in (0, 25, 50, 75, 100):
-        left = tick / 100 * track_width
-        timeline_html += (
-            f'<span style="position:absolute;left:{left:.0f}px;'
-            f'transform:translateX(-50%)">{tick}%</span>'
-        )
-    timeline_html += '</div></div>'
-
-    # One row per model
-    for model in models:
-        color = _model_color(model)
-        label = _model_label(model)
-
-        timeline_html += (
-            f'<div style="display:grid;grid-template-columns:100px {track_width}px;'
-            f'gap:8px;align-items:center;margin-bottom:10px">'
-            f'<div style="text-align:right;font-size:12px;color:{color};'
-            f'font-style:italic">{label}</div>'
-            f'<div style="position:relative;height:26px">'
-        )
-
-        # Baseline track
-        timeline_html += (
-            f'<div style="position:absolute;top:12px;left:0;width:100%;'
-            f'height:1px;background:#ddd"></div>'
-        )
-
-        # IQR whiskers (p25-p75 range) as thin colored bars
+        headers = ["marker"]
+        for m in models:
+            headers.extend([f"{m}_med", f"{m}_p25", f"{m}_p75", f"{m}_n"])
+        tbl_rows = []
         for mk in marker_keys:
-            d = marker_data[model][mk]
-            if d["med"] is None:
-                continue
-            p25 = d["p25"] if d["p25"] is not None else d["med"]
-            p75 = d["p75"] if d["p75"] is not None else d["med"]
-            left_pct = p25
-            width_pct = max(p75 - p25, 0.3)
-            timeline_html += (
-                f'<div style="position:absolute;top:10px;height:5px;'
-                f'left:{left_pct:.2f}%;width:{width_pct:.2f}%;'
-                f'background:{color};opacity:0.18;border-radius:2px" '
-                f'title="{marker_display[mk]} IQR: {p25:.1f}%-{p75:.1f}%"></div>'
-            )
+            row = [mk]
+            for model in models:
+                d = marker_data[model][mk]
+                row.extend([d["med"], d["p25"], d["p75"], d["n"]])
+            tbl_rows.append(row)
+        table_html = _html_table(headers, tbl_rows)
 
-        # Median markers
+        track_width = 560
+        timeline_html = '<div style="margin:20px 0 16px 0">'
+        timeline_html += '<div style="display:flex;gap:16px;margin-bottom:14px;font-size:11px;color:#555">'
         for mk in marker_keys:
-            d = marker_data[model][mk]
-            if d["med"] is None:
-                continue
-            left_pct = d["med"]
-            mk_style = marker_styles[mk].replace("{color}", color)
-
-            if mk == "last_edit":
-                # Hollow circle
-                marker_el = (
-                    f'<div style="position:absolute;left:{left_pct:.2f}%;top:5px;'
-                    f'transform:translateX(-50%);{mk_style};box-sizing:border-box" '
-                    f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
-                )
+            style = style_map[mk].replace("{color}", "#888")
+            is_hollow = "border:2px solid" in style
+            if is_hollow:
+                swatch = f'<span style="display:inline-block;{style};box-sizing:border-box"></span>'
             elif mk == "submit":
-                # Triangle
-                marker_el = (
-                    f'<div style="position:absolute;left:{left_pct:.2f}%;top:4px;'
-                    f'transform:translateX(-50%);{mk_style}" '
-                    f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
-                )
+                swatch = f'<span style="display:inline-block;{style}"></span>'
             else:
-                # Filled shapes
-                marker_el = (
-                    f'<div style="position:absolute;left:{left_pct:.2f}%;top:5px;'
-                    f'transform:translateX(-50%);{mk_style};background:{color}" '
-                    f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
-                )
-            timeline_html += marker_el
+                swatch = f'<span style="display:inline-block;{style};background:#888"></span>'
+            timeline_html += (
+                f'<span style="display:inline-flex;align-items:center;gap:4px">'
+                f'{swatch} {marker_display[mk]}</span>'
+            )
+        timeline_html += '</div>'
 
+        timeline_html += (
+            f'<div style="display:grid;grid-template-columns:100px {track_width}px;gap:8px;margin-bottom:2px">'
+            f'<div></div>'
+            f'<div style="position:relative;height:14px;font-size:9px;color:#999">'
+        )
+        for tick in (0, 25, 50, 75, 100):
+            left = tick / 100 * track_width
+            timeline_html += (
+                f'<span style="position:absolute;left:{left:.0f}px;transform:translateX(-50%)">{tick}%</span>'
+            )
         timeline_html += '</div></div>'
 
-    timeline_html += '</div>'
+        for model in models:
+            color = _model_color(model)
+            label = _model_label(model)
+            timeline_html += (
+                f'<div style="display:grid;grid-template-columns:100px {track_width}px;gap:8px;align-items:center;margin-bottom:10px">'
+                f'<div style="text-align:right;font-size:12px;color:{color};font-style:italic">{label}</div>'
+                f'<div style="position:relative;height:26px">'
+            )
+            timeline_html += (
+                f'<div style="position:absolute;top:12px;left:0;width:100%;height:1px;background:#ddd"></div>'
+            )
 
-    content_10 = timeline_html + table_html_10
+            for mk in marker_keys:
+                d = marker_data[model][mk]
+                if d["med"] is None:
+                    continue
+                p25 = d["p25"] if d["p25"] is not None else d["med"]
+                p75 = d["p75"] if d["p75"] is not None else d["med"]
+                left_pct = p25
+                width_pct = max(p75 - p25, 0.3)
+                timeline_html += (
+                    f'<div style="position:absolute;top:10px;height:5px;left:{left_pct:.2f}%;width:{width_pct:.2f}%;background:{color};opacity:0.18;border-radius:2px" '
+                    f'title="{marker_display[mk]} IQR: {p25:.1f}%-{p75:.1f}%"></div>'
+                )
+
+            for mk in marker_keys:
+                d = marker_data[model][mk]
+                if d["med"] is None:
+                    continue
+                left_pct = d["med"]
+                mk_style = style_map[mk].replace("{color}", color)
+                if "transform:rotate(45deg)" in mk_style:
+                    mk_style = mk_style.replace("transform:rotate(45deg)", "transform:translateX(-50%) rotate(45deg)")
+                    base_transform = ""
+                else:
+                    base_transform = "transform:translateX(-50%);"
+                is_hollow = "border:2px solid" in mk_style
+                if is_hollow:
+                    marker_el = (
+                        f'<div style="position:absolute;left:{left_pct:.2f}%;top:5px;{base_transform}{mk_style};box-sizing:border-box" '
+                        f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
+                    )
+                elif mk == "submit":
+                    marker_el = (
+                        f'<div style="position:absolute;left:{left_pct:.2f}%;top:4px;transform:translateX(-50%);{mk_style}" '
+                        f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
+                    )
+                else:
+                    marker_el = (
+                        f'<div style="position:absolute;left:{left_pct:.2f}%;top:5px;{base_transform}{mk_style};background:{color}" '
+                        f'title="{marker_display[mk]}: {d["med"]:.1f}%"></div>'
+                    )
+                timeline_html += marker_el
+
+            timeline_html += '</div></div>'
+
+        timeline_html += '</div>'
+        return intro_html + timeline_html + table_html
+
+    content_10 = render_marker_variant(
+        ["first_edit", "last_edit", "first_verify", "first_verify_pass", "submit"],
+        {
+            "first_edit": "first edit",
+            "last_edit": "last edit",
+            "first_verify": "first verify",
+            "first_verify_pass": "first pass",
+            "submit": "submit",
+        },
+    )
+
+    content_10 += render_marker_variant(
+        ["first_edit", "last_edit", "first_verify", "last_verify", "submit"],
+        {
+            "first_edit": "first edit",
+            "last_edit": "last edit",
+            "first_verify": "first verify",
+            "last_verify": "last verify",
+            "submit": "submit",
+        },
+        intro_html=(
+            '<h3 style="font-size:14px;font-style:italic;font-weight:400;margin:18px 0 6px 0">'
+            'Alternative view: replace first pass with last verify</h3>'
+            '<p style="font-size:12px;color:#666;margin:0 0 8px 0">'
+            'This version drops first pass, which can happen on baseline tests before any edits, '
+            'and instead shows the last verify step so the post-edit verification tail is easier to see.'
+            '</p>'
+        ),
+        marker_style_overrides={
+            "first_edit": "width:8px;height:8px;border-radius:50%;border:2px solid {color};background:#fffff8",
+            "last_edit": "width:8px;height:8px;border-radius:50%",
+            "first_verify": "width:8px;height:8px;border-radius:1px;transform:rotate(45deg);border:2px solid {color};background:#fffff8",
+            "last_verify": "width:8px;height:8px;border-radius:1px;transform:rotate(45deg)",
+        },
+    )
 
     notes_10 = (
         "<p>Key events in each trajectory, expressed as a percentage of the way through "
@@ -415,6 +430,9 @@ def render_structure_sections(results, models) -> list[tuple[str, str, str]]:
         "for Claude (median 28.8% vs 34.6%): Claude runs the existing test suite early as a diagnostic baseline. "
         "For a marker that means 'the fix works', see work_done in Section 9, which requires a verify pass "
         "after the last source edit.</p>"
+        "<p><strong>last_verify</strong>: the last step whose intent is in SEQUENCE_VERIFY_INTENTS. "
+        "The alternate view replaces first pass with last verify to show where verification actually finishes, "
+        "which makes the late verification tail clearer for Claude.</p>"
         "<p><strong>submit</strong>: the first step with intent 'submit'.</p>"
         "<p><strong>_med / _p25 / _p75</strong>: median, 25th percentile, and 75th "
         "percentile across trajectories where the event occurred.</p>"

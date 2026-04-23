@@ -3,10 +3,11 @@
 Build an HTML analytics page comparing model trajectories.
 
 Charts:
-  1. High-level letter frequencies (bar chart, side-by-side)
-  2. Low-level intent frequencies (bar chart, side-by-side)
-  3. Top 2-letter transitions / bigrams (bar chart, side-by-side)
-  4. Typical trajectory shape visualisations
+  1. High-level letter frequencies
+  2. Low-level intent frequencies (issue-only sessions)
+  3. Low-level intent frequencies (all strict single-model sessions)
+  4. Steps per trajectory
+  5. Typical trajectory shape visualisations
 
 Usage:
   python scripts/build_pi_analytics.py --data-root data/pi-mono --output docs/pi-analytics.html
@@ -15,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import statistics
 import sys
@@ -62,6 +64,13 @@ INTERVENTION_MACROS = [
         "color": "#8a6a9a",
     },
 ]
+
+FIRST_EDIT_MARKER = {
+    "key": "first_edit",
+    "label": "first edit",
+    "symbol": "◆",
+    "color": "#4b5563",
+}
 
 LAST_EDIT_MARKER = {
     "key": "last_edit",
@@ -136,18 +145,27 @@ def _compute_intervention_markers(allowed_paths: dict[str, set[str]], models: li
     return markers
 
 
-def _build_last_edit_marker(file_results: list, *, label: str | None = None) -> dict:
-    vals = [fr.positions["last_edit"] for fr in file_results if fr.positions.get("last_edit") is not None]
+def _build_position_marker(file_results: list, marker_def: dict, *, label: str | None = None) -> dict:
+    key = marker_def["key"]
+    vals = [fr.positions[key] for fr in file_results if fr.positions.get(key) is not None]
     summary = _summarize_positions(vals)
     return {
-        "key": LAST_EDIT_MARKER["key"],
-        "label": label or LAST_EDIT_MARKER["label"],
-        "symbol": LAST_EDIT_MARKER["symbol"],
-        "color": LAST_EDIT_MARKER["color"],
+        "key": key,
+        "label": label or marker_def["label"],
+        "symbol": marker_def["symbol"],
+        "color": marker_def["color"],
         "median": summary["median"],
         "p25": summary["p25"],
         "p75": summary["p75"],
     }
+
+
+def _build_first_edit_marker(file_results: list, *, label: str | None = None) -> dict:
+    return _build_position_marker(file_results, FIRST_EDIT_MARKER, label=label)
+
+
+def _build_last_edit_marker(file_results: list, *, label: str | None = None) -> dict:
+    return _build_position_marker(file_results, LAST_EDIT_MARKER, label=label)
 
 
 def _build_combined_pi_summary(results: dict[str, list], raw_counts: dict[str, int]) -> dict:
@@ -158,6 +176,7 @@ def _build_combined_pi_summary(results: dict[str, list], raw_counts: dict[str, i
     return {
         "label": "All models combined",
         "avg_phase": phase,
+        "first_edit_marker": _build_first_edit_marker(combined_results),
         "last_edit_marker": _build_last_edit_marker(combined_results),
         "resolve_rate": round(sum(1 for fr in combined_results if fr.completed) / n * 100, 1) if n else 0.0,
         "num_trajs": n,
@@ -173,6 +192,7 @@ def _build_combined_benchmark_summary(results: dict[str, list]) -> dict:
     return {
         "label": "All benchmark models combined",
         "avg_phase": phase,
+        "first_edit_marker": _build_first_edit_marker(combined_results),
         "last_edit_marker": _build_last_edit_marker(combined_results),
         "resolve_rate": round(sum(1 for fr in combined_results if fr.resolved) / n * 100, 1) if n else 0.0,
         "num_trajs": n,
@@ -193,6 +213,59 @@ def _parse_merge_specs(specs: list[str] | None) -> list[dict]:
             key, label = dst_side, dst_side
         out.append({"sources": sources, "key": key.strip(), "label": label.strip()})
     return out
+
+
+def _write_intent_csv(path: Path, data: dict, model_display_names: dict[str, str], models: list[str]) -> None:
+    low_prop = data.get("low_proportions", {})
+    top_intents = data.get("top_low_intents", [])
+    intent_cat = data.get("intent_to_category", {})
+    display = data.get("intent_display_names", {})
+
+    headers = ["intent", "category", "display_name", "max_per_100_steps"] + [
+        f"{model_display_names.get(m, m)}_per_100_steps" for m in models
+    ]
+    rows: list[list[str]] = []
+    for intent in top_intents:
+        vals = [low_prop.get(m, {}).get(intent, 0) * 100 for m in models]
+        rows.append([
+            intent,
+            intent_cat.get(intent, ""),
+            display.get(intent, intent),
+            f"{max(vals) if vals else 0.0:.2f}",
+            *[f"{v:.2f}" for v in vals],
+        ])
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+
+
+def _write_sidecar_intent_csvs(output_path: Path, payload: dict) -> None:
+    models = payload.get("models", [])
+    model_display_names = payload.get("model_display_names", {})
+    issue_data = {
+        "low_proportions": payload.get("low_proportions", {}),
+        "top_low_intents": payload.get("top_low_intents", []),
+        "intent_to_category": payload.get("intent_to_category", {}),
+        "intent_display_names": payload.get("intent_display_names", {}),
+    }
+    all_single_data = payload.get("all_single_model_intents", {})
+
+    _write_intent_csv(
+        output_path.with_name(f"{output_path.stem}.issue-intents.csv"),
+        issue_data,
+        model_display_names,
+        models,
+    )
+    _write_intent_csv(
+        output_path.with_name(f"{output_path.stem}.all-single-model-intents.csv"),
+        all_single_data,
+        model_display_names,
+        models,
+    )
 
 
 def _apply_model_merges(
@@ -236,22 +309,32 @@ def build_payload(
     merge_specs: list[dict] | None = None,
 ) -> dict:
     chosen_models = models or list(DEFAULT_EXACT_MODELS)
-    session_filter = SessionFilter(
+    all_results = process_all(data_root, models=chosen_models)
+
+    issue_filter = SessionFilter(
         allowed_models=chosen_models,
         require_single_model=True,
         session_name_prefixes=session_name_prefixes,
     )
-    allowed_paths, raw_counts, _ = collect_filtered_paths(data_root, session_filter)
-    results = process_all(data_root, models=chosen_models)
-    results = _filter_results_to_paths(results, allowed_paths)
+    allowed_paths, raw_counts, _ = collect_filtered_paths(data_root, issue_filter)
+    results = _filter_results_to_paths(all_results, allowed_paths)
     for model in chosen_models:
         raw_n = raw_counts.get(model, 0)
         analyzed_n = len(results.get(model, []))
         print(f"  {model}: {raw_n} strict single-model sessions, {analyzed_n} analyzed")
 
+    all_single_filter = SessionFilter(
+        allowed_models=chosen_models,
+        require_single_model=True,
+        session_name_prefixes=None,
+    )
+    all_single_allowed_paths, all_single_raw_counts, _ = collect_filtered_paths(data_root, all_single_filter)
+    all_single_results = _filter_results_to_paths(all_results, all_single_allowed_paths)
+
     merges = merge_specs or []
     if merges:
         _apply_model_merges(merges, results, allowed_paths, raw_counts)
+        _apply_model_merges(merges, all_single_results, all_single_allowed_paths, all_single_raw_counts)
         for merge in merges:
             key = merge["key"]
             raw_n = raw_counts.get(key, 0)
@@ -265,15 +348,28 @@ def build_payload(
         key=lambda m: (-raw_counts.get(m, 0), -len(results.get(m, [])), m),
     )
     payload = build_analytics_payload(results)
+    all_single_intent_payload = build_analytics_payload(all_single_results)
     for merge in merges:
         if merge["key"] in payload.get("model_display_names", {}):
             payload["model_display_names"][merge["key"]] = merge["label"]
+        if merge["key"] in all_single_intent_payload.get("model_display_names", {}):
+            all_single_intent_payload["model_display_names"][merge["key"]] = merge["label"]
     payload["raw_single_model_counts"] = {m: raw_counts.get(m, 0) for m in sorted_models}
     payload["analyzed_counts"] = {m: len(results.get(m, [])) for m in sorted_models}
     payload["models"] = sorted_models
     payload["intervention_markers"] = _compute_intervention_markers(allowed_paths, sorted_models)
+    payload["first_edit_markers"] = {m: _build_first_edit_marker(results.get(m, [])) for m in sorted_models}
     payload["last_edit_markers"] = {m: _build_last_edit_marker(results.get(m, [])) for m in sorted_models}
-    payload["combined"] = _build_combined_pi_summary(results, {m: raw_counts.get(m, 0) for m in sorted_models})
+    payload["all_single_model_intents"] = {
+        "models": sorted_models,
+        "low_proportions": all_single_intent_payload["low_proportions"],
+        "top_low_intents": all_single_intent_payload["top_low_intents"],
+        "intent_to_category": all_single_intent_payload["intent_to_category"],
+        "intent_display_names": all_single_intent_payload["intent_display_names"],
+        "raw_single_model_counts": {m: all_single_raw_counts.get(m, 0) for m in sorted_models},
+        "analyzed_counts": {m: len(all_single_results.get(m, [])) for m in sorted_models},
+        "num_trajs": {m: len(all_single_results.get(m, [])) for m in sorted_models},
+    }
 
     benchmark_root = benchmark_data_root or Path("data")
     benchmark_models = sorted({BENCHMARK_PAIR_FOR_PI_MODEL[m] for m in sorted_models if m in BENCHMARK_PAIR_FOR_PI_MODEL})
@@ -284,28 +380,22 @@ def build_payload(
             "pair_for_pi_model": {m: BENCHMARK_PAIR_FOR_PI_MODEL[m] for m in sorted_models if m in BENCHMARK_PAIR_FOR_PI_MODEL},
             "avg_phase": benchmark_payload["avg_phase"],
             "median_last_edit": benchmark_payload["median_last_edit"],
+            "first_edit_markers": {m: _build_first_edit_marker(benchmark_results.get(m, [])) for m in benchmark_models},
             "last_edit_markers": {m: _build_last_edit_marker(benchmark_results.get(m, [])) for m in benchmark_models},
             "resolve_rate": benchmark_payload["resolve_rate"],
             "model_display_names": benchmark_payload["model_display_names"],
             "num_trajs": benchmark_payload["num_trajs"],
-            "combined": _build_combined_benchmark_summary(benchmark_results),
         }
     else:
         payload["benchmark"] = {
             "pair_for_pi_model": {},
             "avg_phase": {},
             "median_last_edit": {},
+            "first_edit_markers": {},
             "last_edit_markers": {},
             "resolve_rate": {},
             "model_display_names": {},
             "num_trajs": {},
-            "combined": {
-                "label": "All benchmark models combined",
-                "avg_phase": {},
-                "last_edit_marker": _build_last_edit_marker([]),
-                "resolve_rate": 0.0,
-                "num_trajs": 0,
-            },
         }
     return payload
 
@@ -352,6 +442,31 @@ def render_html(payload: dict) -> str:
       color: var(--text);
     }}
     .chart-desc {{ color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }}
+    .filter-control {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: -6px 0 14px 0;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .filter-control label {{
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }}
+    .filter-control input[type="range"] {{
+      width: 220px;
+    }}
+    .filter-value {{
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }}
+    .filter-meta {{
+      font-size: 11px;
+      color: var(--muted);
+    }}
     .legend {{
       display: flex; gap: 20px; margin-bottom: 16px; font-size: 12.5px;
     }}
@@ -568,6 +683,39 @@ def render_html(payload: dict) -> str:
       border-radius: 2px;
       flex-shrink: 0;
     }}
+    .trajectory-controls {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 10px 0 14px;
+    }}
+    .segmented-control {{
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.02);
+    }}
+    .segmented-control button {{
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }}
+    .segmented-control button.active {{
+      background: var(--text);
+      color: var(--bg);
+    }}
+    .control-note {{
+      font-size: 11.5px;
+      color: var(--muted);
+      font-style: italic;
+    }}
 
     /* Transition matrix */
     .tmatrix {{
@@ -619,20 +767,45 @@ def render_html(payload: dict) -> str:
 
   <h2>2. Intent Comparison</h2>
   <p class="chart-desc">Frequency per 100 steps, compared across all models. For Pi, the git rows use a more semantic sub-taxonomy: GitHub context, repo inspection, diff review, sync/integrate, local state change, and publish.</p>
+  <p class="chart-desc" id="issueIntentDesc"></p>
+  <div class="filter-control">
+    <label for="issueIntentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="issueIntentMaxVValue">0.0</span> per 100 steps</label>
+    <input id="issueIntentMaxVSlider" type="range" min="0" max="5" step="0.1" value="0" />
+    <span class="filter-meta" id="issueIntentMaxVCount"></span>
+  </div>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
 
-  <h2>3. Steps per trajectory, by model</h2>
+  <h2>3. Intent Comparison (all single-model sessions)</h2>
+  <p class="chart-desc">Same intent aggregation as Section 2, but using every available strict single-model Pi session for the selected models, not just sessions whose final session name starts with <code>Issue:</code>.</p>
+  <p class="chart-desc" id="allSingleIntentDesc"></p>
+  <div class="filter-control">
+    <label for="allSingleIntentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="allSingleIntentMaxVValue">0.0</span> per 100 steps</label>
+    <input id="allSingleIntentMaxVSlider" type="range" min="0" max="5" step="0.1" value="0" />
+    <span class="filter-meta" id="allSingleIntentMaxVCount"></span>
+  </div>
+  <div class="chart-wrapper">
+    <div id="heatTableAllSingle"></div>
+  </div>
+
+  <h2>4. Steps per trajectory, by model</h2>
   <p class="chart-desc">Cumulative share of runs that finished within N steps. Dashed line marks the 250-step cap.</p>
   <p class="chart-desc" id="stepDistDesc"></p>
   <div class="chart-wrapper">
     <canvas id="stepDistChart" height="320"></canvas>
   </div>
 
-  <h2>4. Typical Trajectory Shape</h2>
-  <p class="chart-desc">Each model is shown as a pair: benchmark (agent alone) above, maintainer-guided Pi sessions below. Markers are median-only, with no bands: △ = authorization, ○ = steering, □ = closeout, ◇ = last edit.</p>
+  <h2>5. Typical Trajectory Shape</h2>
+  <p class="chart-desc">Each model is shown as a pair: benchmark (agent alone) above, maintainer-guided Pi sessions below. Markers are median-only, with no bands: △ = authorization, ○ = steering, □ = closeout, ◆ = first edit, ◇ = last edit.</p>
   <p class="chart-desc">Where a direct public benchmark run is unavailable in this repo, the benchmark row uses the closest family baseline we do have: GPT-5 for the <code>gpt-5.*</code> models and Sonnet 4.5 for the <code>claude-opus-4-*</code> models.</p>
+  <div class="trajectory-controls">
+    <div class="segmented-control" id="trajectoryGitToggle" role="tablist" aria-label="Trajectory shape git view">
+      <button type="button" class="active" data-include-git="true">with git</button>
+      <button type="button" data-include-git="false">without git</button>
+    </div>
+    <div class="control-note" id="trajectoryGitNote"></div>
+  </div>
   <div id="stackedPanels"></div>
 
 
@@ -686,6 +859,15 @@ const GLM_COLOR = '#6a9a6a';
 const GEMINI_COLOR = '#9a6a9a';
 const MUTED = '#6b7280';
 const TEXT = '#1a1a1a';
+const STACKED_GROUPS = [
+  {{ name: 'understand',   letters: ['R','S'], color: '#5a7d9a' }},
+  {{ name: 'reproduce',    letters: ['P'],     color: '#b0956a' }},
+  {{ name: 'edit',         letters: ['E'],     color: '#4a8a5a' }},
+  {{ name: 'verify',       letters: ['V'],     color: '#b56a50' }},
+  {{ name: 'git',          letters: ['G'],     color: '#8a7a5a' }},
+  {{ name: 'housekeeping', letters: ['H'],     color: '#7a9a52' }},
+];
+let includeGitInStacked = true;
 
 function fmtPct(v) {{
   if (v == null || Number.isNaN(v)) return '—';
@@ -832,74 +1014,123 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
   el.innerHTML = html;
 }})();
 
-// 2. Paired horizontal bars
-(function() {{
-  const el = document.getElementById('heatTable');
-  const intents = D.top_low_intents;
-  const catMap = D.intent_to_category || {{}};
+// 2–3. Paired horizontal bars
+function renderIntentComparisonTable(containerId, data, threshold, countId) {{
+  const el = document.getElementById(containerId);
+  if (!el || !data) return;
+
+  const intents = data.top_low_intents || [];
+  const catMap = data.intent_to_category || {{}};
+  const displayNames = data.intent_display_names || {{}};
+  const lowProportions = data.low_proportions || {{}};
   const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  const rows = intents.map(intent => {{
+  const allRows = intents.map(intent => {{
     const vals = {{}};
     let maxV = 0;
     for (const m of ALL_MODELS) {{
-      vals[m] = (D.low_proportions[m][intent] || 0) * 100;
+      vals[m] = (((lowProportions[m] || {{}})[intent]) || 0) * 100;
       if (vals[m] > maxV) maxV = vals[m];
     }}
     const cat = catMap[intent] || '?';
     return {{ intent, vals, maxV, cat }};
   }});
 
-  {{
+  const rows = allRows.filter(r => r.maxV > threshold);
+  const countEl = countId ? document.getElementById(countId) : null;
+  if (countEl) countEl.textContent = `${{rows.length}}/${{allRows.length}} rows shown`;
 
-    const grouped = {{}};
-    for (const r of rows) {{
-      if (!grouped[r.cat]) grouped[r.cat] = [];
-      grouped[r.cat].push(r);
-    }}
-    for (const cat of Object.keys(grouped)) {{
-      grouped[cat].sort((a, b) => b.maxV - a.maxV);
-    }}
-
-    const maxVal = Math.max(...rows.map(r => r.maxV), 1);
-    function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
-
-    let html = `<table class="paired-table">
-      <tbody>`;
-
-    let rowIdx = 0;
-    for (const cat of catOrder) {{
-      if (!grouped[cat] || grouped[cat].length === 0) continue;
-      html += `<tr class="cat-header"><td colspan="2">${{cat}}</td></tr>`;
-
-      for (const r of grouped[cat]) {{
-        const displayName = (D.intent_display_names || {{}})[r.intent] || r.intent;
-        const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
-        const best = Math.max(...ALL_MODELS.map(m => r.vals[m]));
-
-        html += `<tr class="paired-row${{zebra}}">
-          <td class="paired-name" title="${{r.intent}}">${{displayName}}</td>
-          <td class="paired-bars">`;
-        for (const m of ALL_MODELS) {{
-          const v = r.vals[m];
-          const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
-          html += `<div class="paired-bar-row">
-              <div class="paired-bar" style="width:${{barPct(v)}}%;background:${{MODEL_COLORS[m]}}"></div>
-              <span class="paired-bar-val" style="color:${{MODEL_COLORS[m]}};${{bold}}">${{v.toFixed(1)}}</span>
-            </div>`;
-        }}
-        html += `</td>
-        </tr>`;
-        rowIdx++;
-      }}
-    }}
-
-    html += '</tbody></table>';
-    el.innerHTML = html;
+  if (!rows.length) {{
+    el.innerHTML = `<div class="chart-desc">No intent rows exceed ${{threshold.toFixed(1)}} per 100 steps.</div>`;
+    return;
   }}
-}})();
 
-// 3. Step distribution — overlaid ECDFs
+  const grouped = {{}};
+  for (const r of rows) {{
+    if (!grouped[r.cat]) grouped[r.cat] = [];
+    grouped[r.cat].push(r);
+  }}
+  for (const cat of Object.keys(grouped)) {{
+    grouped[cat].sort((a, b) => b.maxV - a.maxV);
+  }}
+
+  const maxVal = Math.max(...rows.map(r => r.maxV), 1);
+  function barPct(v) {{ return (v / maxVal * 100).toFixed(1); }}
+
+  let html = `<table class="paired-table"><tbody>`;
+  let rowIdx = 0;
+  for (const cat of catOrder) {{
+    if (!grouped[cat] || grouped[cat].length === 0) continue;
+    html += `<tr class="cat-header"><td colspan="2">${{cat}}</td></tr>`;
+
+    for (const r of grouped[cat]) {{
+      const displayName = displayNames[r.intent] || r.intent;
+      const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
+      const best = Math.max(...ALL_MODELS.map(m => r.vals[m]));
+
+      html += `<tr class="paired-row${{zebra}}">
+        <td class="paired-name" title="${{r.intent}}">${{displayName}}</td>
+        <td class="paired-bars">`;
+      for (const m of ALL_MODELS) {{
+        const v = r.vals[m];
+        const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
+        html += `<div class="paired-bar-row">
+            <div class="paired-bar" style="width:${{barPct(v)}}%;background:${{MODEL_COLORS[m]}}"></div>
+            <span class="paired-bar-val" style="color:${{MODEL_COLORS[m]}};${{bold}}">${{v.toFixed(1)}}</span>
+          </div>`;
+      }}
+      html += `</td></tr>`;
+      rowIdx++;
+    }}
+  }}
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}}
+
+function bindIntentThresholdControl(sliderId, valueId, countId, containerId, data, defaultThreshold) {{
+  const slider = document.getElementById(sliderId);
+  const valueEl = document.getElementById(valueId);
+  function render() {{
+    const threshold = Number(slider?.value || defaultThreshold || 0);
+    if (valueEl) valueEl.textContent = threshold.toFixed(1);
+    renderIntentComparisonTable(containerId, data, threshold, countId);
+  }}
+  if (slider) slider.addEventListener('input', render);
+  render();
+}}
+
+function renderIntentComparisonSummary(descId, data, scopeLabel) {{
+  const el = document.getElementById(descId);
+  if (!el || !data) return;
+
+  const rawCounts = data.raw_single_model_counts || {{}};
+  const analyzedCounts = data.analyzed_counts || data.num_trajs || {{}};
+  const totalRaw = ALL_MODELS.reduce((sum, m) => sum + (rawCounts[m] || 0), 0);
+  const totalAnalyzed = ALL_MODELS.reduce((sum, m) => sum + (analyzedCounts[m] || 0), 0);
+  const perModel = ALL_MODELS
+    .map(m => `${{MODEL_NAMES[m]}}: ${{rawCounts[m] || 0}} raw / ${{analyzedCounts[m] || 0}} analyzed`)
+    .join(' · ');
+
+  el.textContent = `${{scopeLabel}}: ${{totalRaw}} raw strict single-model sessions, ${{totalAnalyzed}} analyzed. ${{perModel}}.`;
+}}
+
+bindIntentThresholdControl('issueIntentMaxVSlider', 'issueIntentMaxVValue', 'issueIntentMaxVCount', 'heatTable', {{
+  top_low_intents: D.top_low_intents,
+  low_proportions: D.low_proportions,
+  intent_to_category: D.intent_to_category,
+  intent_display_names: D.intent_display_names,
+}}, 0);
+renderIntentComparisonSummary('issueIntentDesc', {{
+  raw_single_model_counts: D.raw_single_model_counts,
+  analyzed_counts: D.analyzed_counts,
+  num_trajs: D.num_trajs,
+}}, 'Issue sessions only');
+
+bindIntentThresholdControl('allSingleIntentMaxVSlider', 'allSingleIntentMaxVValue', 'allSingleIntentMaxVCount', 'heatTableAllSingle', D.all_single_model_intents, 0);
+renderIntentComparisonSummary('allSingleIntentDesc', D.all_single_model_intents, 'All sessions');
+
+// 4. Step distribution — overlaid ECDFs
 (function() {{
   const {{ ctx, w, h }} = getCtx('stepDistChart');
   const left = 56, top = 22, bot = 46;
@@ -1089,20 +1320,14 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {{
 function drawStackedArea(canvasId, phaseData, opts = {{}}) {{
   const markers = opts.markers || [];
   const showMarkers = markers.length > 0;
+  const includeGit = opts.includeGit !== false;
   const {{ ctx, w, h }} = getCtx(canvasId);
   const left = 40, right = 18, top = 22, bot = showMarkers ? 28 : 12;
   const plotW = w - left - right;
   const plotH = h - top - bot;
   const bins = 20;
 
-  const groups = [
-    {{ name: 'understand',   letters: ['R','S'], color: '#5a7d9a' }},
-    {{ name: 'reproduce',    letters: ['P'],     color: '#b0956a' }},
-    {{ name: 'edit',         letters: ['E'],     color: '#4a8a5a' }},
-    {{ name: 'verify',       letters: ['V'],     color: '#b56a50' }},
-    {{ name: 'git',          letters: ['G'],     color: '#8a7a5a' }},
-    {{ name: 'housekeeping', letters: ['H'],     color: '#7a9a52' }},
-  ];
+  const groups = STACKED_GROUPS.filter(g => includeGit || g.name !== 'git');
 
   const xPct = pct => left + (pct / 100) * plotW;
   const xAtBin = i => left + (i / (bins - 1)) * plotW;
@@ -1226,27 +1451,42 @@ function drawStackedArea(canvasId, phaseData, opts = {{}}) {{
   }}
 }}
 
-(function() {{
+function syncTrajectoryGitToggle() {{
+  const toggle = document.getElementById('trajectoryGitToggle');
+  const note = document.getElementById('trajectoryGitNote');
+  if (toggle) {{
+    for (const btn of toggle.querySelectorAll('button[data-include-git]')) {{
+      const wantsGit = btn.dataset.includeGit === 'true';
+      btn.classList.toggle('active', wantsGit === includeGitInStacked);
+      btn.setAttribute('aria-pressed', wantsGit === includeGitInStacked ? 'true' : 'false');
+    }}
+  }}
+  if (note) {{
+    note.textContent = includeGitInStacked
+      ? 'With git: shapes include the git layer.'
+      : 'Without git: the git layer is removed and the remaining categories are re-normalized to 100% in each bin.';
+  }}
+}}
+
+function renderStackedPanels() {{
   const container = document.getElementById('stackedPanels');
   if (!container) return;
-  const interventionOrder = ['authorization', 'steering', 'closeout'];
-  const stackedScopes = ['__all__', ...ALL_MODELS];
+  container.innerHTML = '';
 
-  for (const m of stackedScopes) {{
-    const isCombined = m === '__all__';
+  const interventionOrder = ['authorization', 'steering', 'closeout'];
+
+  for (const m of ALL_MODELS) {{
     const wrap = document.createElement('div');
     wrap.className = 'chart-wrapper';
-    const cls = isCombined ? '' : (tagClass[m] || '');
-    const title = isCombined ? (D.combined?.label || 'All models combined') : MODEL_NAMES[m];
-    const guidedRate = isCombined ? D.combined?.resolve_rate : D.resolve_rate[m];
-    const rawN = isCombined ? (D.combined?.raw_single_model_count ?? 0) : (D.raw_single_model_counts?.[m] ?? 0);
-    const analyzedN = isCombined ? (D.combined?.num_trajs ?? 0) : (D.analyzed_counts?.[m] ?? D.num_trajs[m] ?? 0);
-    const benchmarkModel = isCombined ? '__all__' : (D.benchmark?.pair_for_pi_model?.[m] || null);
-    const benchmarkRate = isCombined ? D.benchmark?.combined?.resolve_rate : (benchmarkModel ? D.benchmark?.resolve_rate?.[benchmarkModel] : null);
-    const benchmarkN = isCombined ? D.benchmark?.combined?.num_trajs : (benchmarkModel ? D.benchmark?.num_trajs?.[benchmarkModel] : null);
-    const benchmarkName = isCombined
-      ? (D.benchmark?.combined?.label || 'All benchmark models combined')
-      : (benchmarkModel ? D.benchmark?.model_display_names?.[benchmarkModel] || benchmarkModel : null);
+    const cls = tagClass[m] || '';
+    const title = MODEL_NAMES[m];
+    const guidedRate = D.resolve_rate[m];
+    const rawN = D.raw_single_model_counts?.[m] ?? 0;
+    const analyzedN = D.analyzed_counts?.[m] ?? D.num_trajs[m] ?? 0;
+    const benchmarkModel = D.benchmark?.pair_for_pi_model?.[m] || null;
+    const benchmarkRate = benchmarkModel ? D.benchmark?.resolve_rate?.[benchmarkModel] : null;
+    const benchmarkN = benchmarkModel ? D.benchmark?.num_trajs?.[benchmarkModel] : null;
+    const benchmarkName = benchmarkModel ? D.benchmark?.model_display_names?.[benchmarkModel] || benchmarkModel : null;
 
     const benchmarkSub = benchmarkModel && benchmarkRate != null
       ? `${{benchmarkN}} trajectories · ${{benchmarkRate.toFixed(1)}}% resolved · ${{benchmarkName}}`
@@ -1269,24 +1509,41 @@ function drawStackedArea(canvasId, phaseData, opts = {{}}) {{
       `</div>`;
     container.appendChild(wrap);
 
-    const benchmarkPhase = isCombined ? D.benchmark?.combined?.avg_phase : D.benchmark?.avg_phase?.[benchmarkModel];
-    const benchmarkLastEditMarker = isCombined
-      ? D.benchmark?.combined?.last_edit_marker
-      : D.benchmark?.last_edit_markers?.[benchmarkModel];
+    const benchmarkPhase = D.benchmark?.avg_phase?.[benchmarkModel];
+    const benchmarkFirstEditMarker = D.benchmark?.first_edit_markers?.[benchmarkModel];
+    const benchmarkLastEditMarker = D.benchmark?.last_edit_markers?.[benchmarkModel];
     if (benchmarkPhase) {{
       drawStackedArea(`stacked_benchmark_${{m}}`, benchmarkPhase, {{
-        markers: benchmarkLastEditMarker ? [benchmarkLastEditMarker] : [],
+        markers: [benchmarkFirstEditMarker, benchmarkLastEditMarker].filter(Boolean),
+        includeGit: includeGitInStacked,
       }});
     }}
 
     const interventions = interventionOrder
-      .map(key => D.intervention_markers?.[isCombined ? '__all__' : m]?.[key])
+      .map(key => D.intervention_markers?.[m]?.[key])
       .filter(Boolean);
-    const guidedLastEditMarker = isCombined ? D.combined?.last_edit_marker : D.last_edit_markers?.[m];
-    drawStackedArea(`stacked_guided_${{m}}`, isCombined ? D.combined?.avg_phase : D.avg_phase[m], {{
-      markers: [...interventions, ...(guidedLastEditMarker ? [guidedLastEditMarker] : [])],
+    const guidedFirstEditMarker = D.first_edit_markers?.[m];
+    const guidedLastEditMarker = D.last_edit_markers?.[m];
+    drawStackedArea(`stacked_guided_${{m}}`, D.avg_phase[m], {{
+      markers: [guidedFirstEditMarker, ...interventions, guidedLastEditMarker].filter(Boolean),
+      includeGit: includeGitInStacked,
     }});
   }}
+}}
+
+(function() {{
+  const toggle = document.getElementById('trajectoryGitToggle');
+  if (toggle) {{
+    toggle.addEventListener('click', (ev) => {{
+      const btn = ev.target.closest('button[data-include-git]');
+      if (!btn) return;
+      includeGitInStacked = btn.dataset.includeGit === 'true';
+      syncTrajectoryGitToggle();
+      renderStackedPanels();
+    }});
+  }}
+  syncTrajectoryGitToggle();
+  renderStackedPanels();
 }})();
 
 </script>
@@ -1333,6 +1590,7 @@ def main() -> None:
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
+    _write_sidecar_intent_csvs(out, payload)
     print(f"Wrote {out}")
     counts = " ".join(f"{m}={payload['num_trajs'][m]}" for m in payload["models"])
     print(counts)

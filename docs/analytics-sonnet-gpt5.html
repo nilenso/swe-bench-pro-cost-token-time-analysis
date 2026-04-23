@@ -37,6 +37,31 @@
       color: var(--text);
     }
     .chart-desc { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+    .filter-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: -6px 0 14px 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .filter-control label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .filter-control input[type="range"] {
+      width: 220px;
+    }
+    .filter-value {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .filter-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
     .legend {
       display: flex; gap: 20px; margin-bottom: 16px; font-size: 12.5px;
     }
@@ -293,6 +318,11 @@
 
   <h2>2. Intent Comparison</h2>
   <p class="chart-desc">Frequency per 100 steps, compared across all models.</p>
+  <div class="filter-control">
+    <label for="intentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="intentMaxVValue">1.5</span> per 100 steps</label>
+    <input id="intentMaxVSlider" type="range" min="0" max="5" step="0.1" value="1.5" />
+    <span class="filter-meta" id="intentMaxVCount"></span>
+  </div>
   <div class="chart-wrapper">
     <div id="heatTable"></div>
   </div>
@@ -501,70 +531,94 @@ function drawHorizontalGroupedBar(canvasId, labels, gptVals, claudeVals) {
 })();
 
 // 2. Paired horizontal bars
-(function() {
-  const el = document.getElementById('heatTable');
-  const intents = D.top_low_intents;
-  const catMap = D.intent_to_category || {};
+function renderIntentComparisonTable(containerId, data, threshold, countId) {
+  const el = document.getElementById(containerId);
+  if (!el || !data) return;
+
+  const intents = data.top_low_intents || [];
+  const catMap = data.intent_to_category || {};
+  const displayNames = data.intent_display_names || {};
+  const lowProportions = data.low_proportions || {};
   const catOrder = ['read','search','reproduce','edit','verify','git','housekeeping','other'];
 
-  const rows = intents.map(intent => {
+  const allRows = intents.map(intent => {
     const vals = {};
     let maxV = 0;
     for (const m of ALL_MODELS) {
-      vals[m] = (D.low_proportions[m][intent] || 0) * 100;
+      vals[m] = (((lowProportions[m] || {})[intent]) || 0) * 100;
       if (vals[m] > maxV) maxV = vals[m];
     }
     const cat = catMap[intent] || '?';
     return { intent, vals, maxV, cat };
-  }).filter(r => r.maxV > 1.5);
+  });
 
-  {
+  const rows = allRows.filter(r => r.maxV > threshold);
+  const countEl = countId ? document.getElementById(countId) : null;
+  if (countEl) countEl.textContent = `${rows.length}/${allRows.length} rows shown`;
 
-    const grouped = {};
-    for (const r of rows) {
-      if (!grouped[r.cat]) grouped[r.cat] = [];
-      grouped[r.cat].push(r);
-    }
-    for (const cat of Object.keys(grouped)) {
-      grouped[cat].sort((a, b) => b.maxV - a.maxV);
-    }
-
-    const maxVal = Math.max(...rows.map(r => r.maxV), 1);
-    function barPct(v) { return (v / maxVal * 100).toFixed(1); }
-
-    let html = `<table class="paired-table">
-      <tbody>`;
-
-    let rowIdx = 0;
-    for (const cat of catOrder) {
-      if (!grouped[cat] || grouped[cat].length === 0) continue;
-      html += `<tr class="cat-header"><td colspan="2">${cat}</td></tr>`;
-
-      for (const r of grouped[cat]) {
-        const displayName = (D.intent_display_names || {})[r.intent] || r.intent;
-        const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
-        const best = Math.max(...ALL_MODELS.map(m => r.vals[m]));
-
-        html += `<tr class="paired-row${zebra}">
-          <td class="paired-name" title="${r.intent}">${displayName}</td>
-          <td class="paired-bars">`;
-        for (const m of ALL_MODELS) {
-          const v = r.vals[m];
-          const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
-          html += `<div class="paired-bar-row">
-              <div class="paired-bar" style="width:${barPct(v)}%;background:${MODEL_COLORS[m]}"></div>
-              <span class="paired-bar-val" style="color:${MODEL_COLORS[m]};${bold}">${v.toFixed(1)}</span>
-            </div>`;
-        }
-        html += `</td>
-        </tr>`;
-        rowIdx++;
-      }
-    }
-
-    html += '</tbody></table>';
-    el.innerHTML = html;
+  if (!rows.length) {
+    el.innerHTML = `<div class="chart-desc">No intent rows exceed ${threshold.toFixed(1)} per 100 steps.</div>`;
+    return;
   }
+
+  const grouped = {};
+  for (const r of rows) {
+    if (!grouped[r.cat]) grouped[r.cat] = [];
+    grouped[r.cat].push(r);
+  }
+  for (const cat of Object.keys(grouped)) {
+    grouped[cat].sort((a, b) => b.maxV - a.maxV);
+  }
+
+  const maxVal = Math.max(...rows.map(r => r.maxV), 1);
+  function barPct(v) { return (v / maxVal * 100).toFixed(1); }
+
+  let html = `<table class="paired-table"><tbody>`;
+  let rowIdx = 0;
+  for (const cat of catOrder) {
+    if (!grouped[cat] || grouped[cat].length === 0) continue;
+    html += `<tr class="cat-header"><td colspan="2">${cat}</td></tr>`;
+
+    for (const r of grouped[cat]) {
+      const displayName = displayNames[r.intent] || r.intent;
+      const zebra = rowIdx % 2 === 1 ? ' zebra' : '';
+      const best = Math.max(...ALL_MODELS.map(m => r.vals[m]));
+
+      html += `<tr class="paired-row${zebra}">
+        <td class="paired-name" title="${r.intent}">${displayName}</td>
+        <td class="paired-bars">`;
+      for (const m of ALL_MODELS) {
+        const v = r.vals[m];
+        const bold = v === best && best >= 0.3 ? 'font-weight:700' : '';
+        html += `<div class="paired-bar-row">
+            <div class="paired-bar" style="width:${barPct(v)}%;background:${MODEL_COLORS[m]}"></div>
+            <span class="paired-bar-val" style="color:${MODEL_COLORS[m]};${bold}">${v.toFixed(1)}</span>
+          </div>`;
+      }
+      html += `</td></tr>`;
+      rowIdx++;
+    }
+  }
+
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+(function() {
+  const slider = document.getElementById('intentMaxVSlider');
+  const valueEl = document.getElementById('intentMaxVValue');
+  function render() {
+    const threshold = Number(slider?.value || 1.5);
+    if (valueEl) valueEl.textContent = threshold.toFixed(1);
+    renderIntentComparisonTable('heatTable', {
+      top_low_intents: D.top_low_intents,
+      low_proportions: D.low_proportions,
+      intent_to_category: D.intent_to_category,
+      intent_display_names: D.intent_display_names,
+    }, threshold, 'intentMaxVCount');
+  }
+  if (slider) slider.addEventListener('input', render);
+  render();
 })();
 
 // 3. Step distribution — overlaid ECDFs

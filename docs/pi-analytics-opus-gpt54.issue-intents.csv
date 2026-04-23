@@ -1,0 +1,46 @@
+intent,category,display_name,max_per_100_steps,gpt-5.4_per_100_steps,Opus 4.5/4.6_per_100_steps
+read-file-full,read,view file,20.32,20.32,10.25
+search-keyword,search,grep / ripgrep,16.34,15.49,16.34
+read-file-range,read,view lines (range),13.22,13.22,13.10
+edit-source,edit,edit source,14.29,8.80,14.29
+git-github-context,git,GitHub context,10.40,10.40,7.08
+git-repo-inspect,git,repo inspect,5.95,5.95,4.10
+compile-build,verify,go build / make / tsc,7.01,2.24,7.01
+git-local-state-change,git,local state change,4.43,2.02,4.43
+read-file-full(truncated),read,view file (truncated),2.53,2.53,2.31
+run-inline-verify,verify,inline verify snippet,3.14,3.14,0.40
+edit-test-or-repro,verify,edit test / repro,1.92,1.54,1.92
+git-publish,git,publish,2.38,0.96,2.38
+create-file,edit,create file,1.25,1.25,1.12
+bash-other,other,other shell command,1.32,1.15,1.32
+inspect-file-metadata,search,wc / stat,1.73,1.73,0.07
+run-test-specific,verify,pytest -k / :: (targeted),1.28,1.28,0.73
+search-files-by-name,search,find by filename,1.39,0.77,1.39
+read-via-bash,read,cat / head / tail,1.65,0.29,1.65
+run-custom-script,verify,run custom script,0.99,0.54,0.99
+list-directory,search,ls / tree,1.79,0.13,1.79
+git-diff-review,git,diff review,0.79,0.58,0.79
+git-sync-integrate,git,sync / integrate,0.66,0.58,0.66
+read-config-file,read,view config file,0.67,0.67,0.26
+run-test-suite,verify,pytest / go test (broad),1.32,0.06,1.32
+file-cleanup,housekeeping,rm / mv / cp,0.86,0.26,0.86
+create-file-via-inline-script,edit,inline create-file snippet,0.58,0.58,0.00
+run-inline-snippet,verify,python -c / node -e,0.51,0.51,0.07
+fetch-url,other,curl / http,1.12,0.00,1.12
+search-files-by-content,search,find | grep,0.93,0.06,0.93
+edit-source(failed),failed,edit source (failed),0.38,0.38,0.20
+create-test-script,verify,write test file,0.32,0.32,0.26
+bash-command(failed),failed,bash (shell error),0.29,0.29,0.26
+tmux-session,housekeeping,tmux,0.35,0.35,0.07
+read-file-failed,failed,read (failed),0.32,0.32,0.07
+edit-test-or-repro(failed),failed,edit test/repro (failed),0.26,0.26,0.07
+read-via-inline-script,read,inline read snippet,0.26,0.26,0.00
+run-script(failed),failed,python/node (shell error),0.19,0.19,0.00
+web-search,search,web search,0.16,0.16,0.00
+create-repro-script,reproduce,write repro script,0.13,0.13,0.00
+install-deps,housekeeping,pip install / npm install,0.26,0.00,0.26
+search-keyword(failed),failed,grep/find (shell error),0.07,0.06,0.07
+run-repro-script,reproduce,run repro script,0.10,0.10,0.00
+start-service,housekeeping,"start service (redis, etc.)",0.07,0.06,0.07
+edit-via-inline-script,edit,inline edit snippet,0.06,0.06,0.00
+echo,other,echo / printf,0.03,0.03,0.00

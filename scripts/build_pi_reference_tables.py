@@ -24,7 +24,7 @@ from analysis_pi.models import (
     build_model_registry,
 )
 from analysis_pi.orchestrate import process_all
-from analysis_pi.resolved import compute_resolution_by_model
+from analysis_pi.resolved import ModelResolutionStats, compute_resolution_by_model
 from analysis_pi.session_filter import DEFAULT_EXACT_MODELS, SessionFilter, collect_filtered_paths
 from analysis_pi.user_messages import CLASS_ORDER, analyze_user_messages
 
@@ -203,7 +203,6 @@ def _render_intervention_macro_section(user_data: dict, models: list[str], model
             '</div>'
         )
 
-    overall_stats = scope_stats(None)
     parts = [
         '<section><h2>11. Maintainer intervention markers</h2>'
         '<p class="note">This is the higher-level phase view derived from the 7 user-message classes. '
@@ -213,7 +212,6 @@ def _render_intervention_macro_section(user_data: dict, models: list[str], model
         '<p class="note"><strong>solution steering</strong> here intentionally lumps together <code>solution_steer</code>, '
         '<code>evidence_or_repro</code>, <code>qa_or_critique</code>, and <code>validation_request</code>.</p>'
     ]
-    parts.append(chart('All models combined', '#444', overall_stats))
     for model in models:
         parts.append(chart(model_meta[model]['label'], model_meta[model]['color'], scope_stats(model)))
 
@@ -223,7 +221,6 @@ def _render_intervention_macro_section(user_data: dict, models: list[str], model
         if s['median'] is None:
             return '&mdash;'
         return f"{s['session_pct']:.1f}% sessions<br><span class='muted-inline'>median {s['median']:.1f}% · [{s['p25']:.1f},{s['p75']:.1f}]</span>"
-    table_rows.append(['All models combined'] + [cell(overall_stats[m['key']]) for m in macro_defs])
     for model in models:
         sstats = scope_stats(model)
         table_rows.append([html.escape(model_meta[model]['label'])] + [cell(sstats[m['key']]) for m in macro_defs])
@@ -472,14 +469,209 @@ def _render_resolution_section(stats: dict, models: list[str], model_meta: dict[
     )
 
 
-def _render_detailed_classification_section(results: dict[str, list], models: list[str]) -> str:
+def _render_trajectory_metadata_section(
+    meta: dict,
+    raw_single_counts: dict[str, int],
+    models: list[str],
+    model_meta: dict[str, dict[str, str]],
+) -> str:
+    present_models = [m for m in models if m in meta]
+    if not present_models:
+        return ""
+
+    lo_model = min(present_models, key=lambda m: float(meta[m]["median"] or 0))
+    hi_model = max(present_models, key=lambda m: float(meta[m]["median"] or 0))
+    lo_med = float(meta[lo_model]["median"] or 0)
+    hi_med = float(meta[hi_model]["median"] or 0)
+    ratio_text = f" The longer trajectories take ~{(hi_med / lo_med):.1f}x more steps per session." if lo_med > 0 else ""
+    intro = (
+        f'Median trajectory length varies from {_fmt(meta[lo_model]["median"])} to {_fmt(meta[hi_model]["median"])} '
+        f'tool steps ({html.escape(model_meta[lo_model]["label"])} vs. {html.escape(model_meta[hi_model]["label"])}).'
+        f'{ratio_text}'
+    )
+
+    axis_limit = max(int(meta[m]["max"] or 0) for m in present_models)
+    axis_limit = max(1, ((axis_limit + 9) // 10) * 10)
+
+    chart_rows: list[str] = []
+    for m in present_models:
+        mm = meta[m]
+        color = model_meta[m]["color"]
+        p25 = float(mm["p25"] or 0)
+        p75 = float(mm["p75"] or 0)
+        median = float(mm["median"] or 0)
+        left = p25 / axis_limit * 100.0
+        width = max((p75 - p25) / axis_limit * 100.0, 1.0)
+        dot = median / axis_limit * 100.0
+        chart_rows.append(
+            '<div class="marker-row">'
+            f'<div class="marker-label" style="color:{color}">{html.escape(model_meta[m]["label"])}</div>'
+            '<div class="marker-track">'
+            '<span class="marker-grid" style="left:25%"></span>'
+            '<span class="marker-grid" style="left:50%"></span>'
+            '<span class="marker-grid" style="left:75%"></span>'
+            f'<span class="marker-iqr" style="left:{left:.1f}%;width:{width:.1f}%;background:{color}"></span>'
+            f'<span class="marker-dot" style="left:{dot:.1f}%;background:{color}"></span>'
+            f'<span style="position:absolute;left:{dot:.1f}%;top:-18px;transform:translateX(-50%);font-size:10px;color:{color}">{_fmt(mm["median"])}</span>'
+            '</div>'
+            f'<div class="marker-summary">{_fmt(mm["p25"])}&ndash;{_fmt(mm["p75"])} IQR · {_fmt(mm["min"])}&ndash;{_fmt(mm["max"])} range</div>'
+            '</div>'
+        )
+
+    rows: list[list[str]] = []
+    for m in present_models:
+        mm = meta[m]
+        rows.append([
+            html.escape(model_meta[m]["label"]),
+            _fmt(raw_single_counts.get(m, 0)),
+            _fmt(mm["n"]),
+            _fmt(mm["total_steps"]),
+            _fmt(mm["avg"]),
+            _fmt(mm["median"]),
+            _fmt(mm["p25"]),
+            _fmt(mm["p75"]),
+            _fmt(mm["min"]),
+            _fmt(mm["max"]),
+            _fmt(mm["completed"]),
+            html.escape(mm["completion_rate"]),
+        ])
+
+    axis_labels = (
+        '<div class="marker-axis">'
+        '<span>0</span>'
+        f'<span>{axis_limit // 2}</span>'
+        f'<span>{axis_limit} steps</span>'
+        '</div>'
+    )
+
+    return (
+        '<section><h2>1. Trajectory Metadata</h2>'
+        f'<p class="note">{intro}</p>'
+        '<div class="marker-card">'
+        + axis_labels
+        + ''.join(chart_rows)
+        + '</div>'
+        + _html_table(
+            [
+                "model",
+                "single-model sessions",
+                "analyzed sessions",
+                "total_steps",
+                "avg",
+                "median",
+                "p25",
+                "p75",
+                "min",
+                "max",
+                "completed",
+                "completion rate",
+            ],
+            rows,
+        )
+        + '<p class="note">Summary statistics for Pi tool-call trajectory length, measured in classified tool steps per session. '
+        '<strong>single-model sessions</strong> is the raw eligible pool after purity filtering; '
+        '<strong>analyzed sessions</strong> is the subset with a usable tool trajectory; '
+        '<strong>completed</strong> means the transcript reached a terminal assistant stop.</p>'
+        '</section>'
+    )
+
+
+def _parse_merge_specs(specs: list[str] | None) -> list[dict]:
+    """Parse ``--merge-models`` flags of the form ``SRC1,SRC2=KEY:LABEL``."""
+    out: list[dict] = []
+    for spec in specs or []:
+        if "=" not in spec:
+            raise ValueError(f"invalid --merge-models spec (missing '='): {spec!r}")
+        src_side, dst_side = spec.split("=", 1)
+        sources = [s.strip() for s in src_side.split(",") if s.strip()]
+        if not sources:
+            raise ValueError(f"invalid --merge-models spec (no sources): {spec!r}")
+        if ":" in dst_side:
+            key, label = dst_side.split(":", 1)
+        else:
+            key, label = dst_side, dst_side
+        key = key.strip()
+        label = label.strip()
+        if not key:
+            raise ValueError(f"invalid --merge-models spec (empty target key): {spec!r}")
+        out.append({"sources": sources, "key": key, "label": label or key})
+    return out
+
+
+def _apply_model_merges(
+    merges: list[dict],
+    results: dict[str, list],
+    allowed_paths: dict[str, set[str]],
+    raw_counts: dict[str, int],
+) -> None:
+    """Merge multiple source model keys into a single synthetic key in place."""
+    for merge in merges:
+        key = merge["key"]
+        merged_results: list = []
+        merged_paths: set[str] = set()
+        merged_count = 0
+        for src in merge["sources"]:
+            merged_results.extend(results.pop(src, []))
+            merged_paths.update(allowed_paths.pop(src, set()))
+            merged_count += raw_counts.pop(src, 0)
+        if merged_results:
+            results[key] = merged_results
+        if merged_paths:
+            allowed_paths[key] = merged_paths
+        if merged_count:
+            raw_counts[key] = merged_count
+
+
+
+def _merge_resolution_stats(
+    merges: list[dict],
+    resolution_stats: dict[str, ModelResolutionStats],
+) -> dict[str, ModelResolutionStats]:
+    merged = dict(resolution_stats)
+    for merge in merges:
+        key = merge["key"]
+        n_sessions = 0
+        kind_counts: dict[str, int] = {}
+        sessions = []
+        issues_attempted: set[str] = set()
+        issues_resolved: set[str] = set()
+        saw_any = False
+
+        for src in merge["sources"]:
+            stat = merged.pop(src, None)
+            if stat is None:
+                continue
+            saw_any = True
+            n_sessions += stat.n_sessions
+            sessions.extend(stat.sessions)
+            issues_attempted.update(stat.issues_attempted)
+            issues_resolved.update(stat.issues_resolved)
+            for kind, count in stat.kind_counts.items():
+                kind_counts[kind] = kind_counts.get(kind, 0) + count
+
+        if saw_any:
+            merged[key] = ModelResolutionStats(
+                model=key,
+                n_sessions=n_sessions,
+                n_issues_attempted=len(issues_attempted),
+                n_issues_resolved=len(issues_resolved),
+                kind_counts=kind_counts,
+                sessions=sessions,
+                issues_resolved=issues_resolved,
+                issues_attempted=issues_attempted,
+            )
+    return merged
+
+
+
+def _render_detailed_classification_section(results: dict[str, list], models: list[str], model_meta: dict[str, dict[str, str]]) -> str:
     counts, totals = _intent_counters(results, models)
     category_order = ["read", "search", "reproduce", "edit", "verify", "git", "housekeeping", "failed", "other"]
 
     header = (
         '<table><thead><tr>'
         '<th>category</th><th>intent</th><th>description</th>' +
-        ''.join(f'<th>{html.escape(m)}</th>' for m in models) +
+        ''.join(f'<th>{html.escape(model_meta[m]["label"])}</th>' for m in models) +
         '</tr></thead><tbody>'
     )
     rows: list[str] = []
@@ -517,7 +709,7 @@ def _render_detailed_classification_section(results: dict[str, list], models: li
     )
 
 
-def _render_cleanup_decomposition_section(results: dict[str, list], models: list[str]) -> str:
+def _render_cleanup_decomposition_section(results: dict[str, list], models: list[str], model_meta: dict[str, dict[str, str]]) -> str:
     counts, totals = _intent_counters(results, models)
     preferred_order = [
         "git-github-context",
@@ -562,15 +754,26 @@ def _render_cleanup_decomposition_section(results: dict[str, list], models: list
     return (
         '<section><h2>4b. Cleanup decomposition</h2>'
         '<p class="note">In the inherited phase schema, <strong>cleanup = git + housekeeping</strong>. For Pi transcripts this phase is mostly repo workflow, not literal cleanup. This table makes the git side explicit.</p>'
-        + _html_table(["high-level", "intent", "description"] + [html.escape(m) for m in models], summary_rows + rows)
+        + _html_table(["high-level", "intent", "description"] + [html.escape(model_meta[m]["label"]) for m in models], summary_rows + rows)
         + '</section>'
     )
 
 
-def render_html(results: dict[str, list], raw_single_counts: dict[str, int], user_data: dict, resolution_stats: dict) -> str:
+def render_html(
+    results: dict[str, list],
+    raw_single_counts: dict[str, int],
+    user_data: dict,
+    resolution_stats: dict,
+    display_labels: dict[str, str] | None = None,
+) -> str:
     models = sorted(
         results.keys(),
-        key=lambda m: (-raw_single_counts.get(m, 0), -len(results.get(m, [])), m),
+        key=lambda m: (
+            -(resolution_stats.get(m).resolve_rate if resolution_stats.get(m) is not None else -1.0),
+            -raw_single_counts.get(m, 0),
+            -len(results.get(m, [])),
+            m,
+        ),
     )
     meta = aggregate.metadata_summary(results)
     base = aggregate.base_intent_frequencies(results)
@@ -582,6 +785,9 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int], use
     step_dist = aggregate.step_distribution(results)
     wd = aggregate.work_done_vs_completed(results)
     model_meta = build_model_registry(models)
+    for model, label in (display_labels or {}).items():
+        if model in model_meta:
+            model_meta[model]["label"] = label
 
     model_tags = " ".join(
         f'<span class="tag" style="border-color:{model_meta[m]["color"]};color:{model_meta[m]["color"]}">{html.escape(model_meta[m]["label"])}</span>'
@@ -593,32 +799,8 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int], use
     # 0. Task resolution rate
     sections.append(_render_resolution_section(resolution_stats, models, model_meta))
 
-    # 1. Metadata summary
-    rows = []
-    for m in models:
-        mm = meta[m]
-        rows.append([
-            html.escape(model_meta[m]["label"]),
-            _fmt(raw_single_counts.get(m, 0)),
-            _fmt(mm["n"]),
-            _fmt(mm["avg"]),
-            _fmt(mm["median"]),
-            _fmt(mm["p25"]),
-            _fmt(mm["p75"]),
-            _fmt(mm["min"]),
-            _fmt(mm["max"]),
-            _fmt(mm["completed"]),
-            html.escape(mm["completion_rate"]),
-        ])
-    sections.append(
-        '<section><h2>1. Session metadata</h2>'
-        '<p class="note">Strict single-model purity is determined from both <code>assistant.message.model</code> and <code>model_change.modelId</code>. “single-model sessions” is the raw eligible count; “analyzed sessions” is the subset with tool-call trajectories that can actually be classified.</p>'
-        + _html_table(
-            ["model", "single-model sessions", "analyzed sessions", "avg steps", "median", "p25", "p75", "min", "max", "completed", "completion rate"],
-            rows,
-        )
-        + '</section>'
-    )
+    # 1. Trajectory metadata
+    sections.append(_render_trajectory_metadata_section(meta, raw_single_counts, models, model_meta))
 
     # 2. Exit statuses
     exit_rows = []
@@ -646,8 +828,8 @@ def render_html(results: dict[str, list], raw_single_counts: dict[str, int], use
         + '</section>'
     )
 
-    sections.append(_render_detailed_classification_section(results, models))
-    sections.append(_render_cleanup_decomposition_section(results, models))
+    sections.append(_render_detailed_classification_section(results, models, model_meta))
+    sections.append(_render_cleanup_decomposition_section(results, models, model_meta))
 
     # 4. Phase mix
     phase_headers = ["model"] + list(next(iter(phases.values())).keys()) if phases else ["model"]
@@ -896,6 +1078,12 @@ def main() -> None:
         default=["Issue:"],
         help="Keep only sessions whose final non-empty session_info.name starts with this prefix. Repeatable.",
     )
+    parser.add_argument(
+        "--merge-models",
+        action="append",
+        default=[],
+        help="Merge multiple models after filtering, e.g. claude-opus-4-5,claude-opus-4-6=claude-opus-4-5-6:Opus 4.5/4.6",
+    )
     parser.add_argument("--output", "-o", default="docs/pi-references.html")
     args = parser.parse_args()
 
@@ -905,19 +1093,28 @@ def main() -> None:
         require_single_model=True,
         session_name_prefixes=args.session_name_prefix,
     )
+    merge_specs = _parse_merge_specs(args.merge_models)
+
     allowed_paths, raw_counts, _ = collect_filtered_paths(data_root, session_filter)
     results = process_all(data_root, models=args.models)
     results = _filter_results_to_paths(results, allowed_paths)
-    for model in args.models:
+    resolution_stats = compute_resolution_by_model(data_root, session_filter)
+
+    if merge_specs:
+        _apply_model_merges(merge_specs, results, allowed_paths, raw_counts)
+        resolution_stats = _merge_resolution_stats(merge_specs, resolution_stats)
+
+    for model in sorted(results):
         print(f"  {model}: {raw_counts.get(model, 0)} strict single-model sessions, {len(results.get(model, []))} analyzed")
 
     user_data = analyze_user_messages(allowed_paths)
-    resolution_stats = compute_resolution_by_model(data_root, session_filter)
+    display_labels = {spec["key"]: spec["label"] for spec in merge_specs}
     html_out = render_html(
         results,
-        {m: raw_counts.get(m, 0) for m in args.models},
+        raw_counts,
         user_data,
         resolution_stats,
+        display_labels=display_labels,
     )
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)

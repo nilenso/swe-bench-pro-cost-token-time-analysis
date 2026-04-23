@@ -1,0 +1,47 @@
+intent,category,display_name,max_per_100_steps,gpt-5.4_per_100_steps,Opus 4.5/4.6_per_100_steps
+search-keyword,search,grep / ripgrep,16.47,14.54,16.47
+read-file-full,read,view file,19.99,19.99,10.72
+read-file-range,read,view lines (range),13.59,13.59,12.35
+edit-source,edit,edit source,12.44,8.39,12.44
+git-github-context,git,GitHub context,9.68,9.68,9.00
+git-repo-inspect,git,repo inspect,6.82,6.82,6.62
+compile-build,verify,go build / make / tsc,5.28,2.14,5.28
+git-local-state-change,git,local state change,4.74,1.99,4.74
+read-file-full(truncated),read,view file (truncated),2.80,2.71,2.80
+bash-other,other,other shell command,1.86,1.64,1.86
+run-inline-verify,verify,inline verify snippet,3.21,3.21,0.28
+edit-test-or-repro,verify,edit test / repro,1.49,1.49,1.11
+git-publish,git,publish,1.67,0.82,1.67
+list-directory,search,ls / tree,2.00,0.27,2.00
+create-file,edit,create file,1.29,1.29,0.90
+read-via-bash,read,cat / head / tail,1.79,0.35,1.79
+git-sync-integrate,git,sync / integrate,1.48,0.65,1.48
+search-files-by-name,search,find by filename,1.11,0.85,1.11
+git-diff-review,git,diff review,1.06,0.77,1.06
+run-test-specific,verify,pytest -k / :: (targeted),1.27,1.27,0.54
+inspect-file-metadata,search,wc / stat,1.44,1.44,0.09
+run-custom-script,verify,run custom script,0.73,0.70,0.73
+run-test-suite,verify,pytest / go test (broad),1.06,0.05,1.06
+read-config-file,read,view config file,0.70,0.70,0.45
+file-cleanup,housekeeping,rm / mv / cp,0.59,0.42,0.59
+search-files-by-content,search,find | grep,0.59,0.05,0.59
+bash-command(failed),failed,bash (shell error),0.35,0.35,0.26
+read-file-failed,failed,read (failed),0.28,0.25,0.28
+create-file-via-inline-script,edit,inline create-file snippet,0.47,0.47,0.07
+edit-source(failed),failed,edit source (failed),0.42,0.42,0.12
+create-test-script,verify,write test file,0.32,0.32,0.21
+fetch-url,other,curl / http,0.49,0.02,0.49
+run-inline-snippet,verify,python -c / node -e,0.45,0.45,0.05
+echo,other,echo / printf,0.25,0.25,0.19
+install-deps,housekeeping,pip install / npm install,0.42,0.00,0.42
+tmux-session,housekeeping,tmux,0.27,0.27,0.02
+edit-test-or-repro(failed),failed,edit test/repro (failed),0.20,0.20,0.05
+read-via-inline-script,read,inline read snippet,0.25,0.25,0.00
+run-script(failed),failed,python/node (shell error),0.20,0.20,0.00
+create-repro-script,reproduce,write repro script,0.17,0.17,0.00
+web-search,search,web search,0.12,0.12,0.05
+run-repro-script,reproduce,run repro script,0.17,0.17,0.00
+start-service,housekeeping,"start service (redis, etc.)",0.07,0.07,0.02
+edit-via-inline-script,edit,inline edit snippet,0.07,0.07,0.00
+search-keyword(failed),failed,grep/find (shell error),0.05,0.05,0.02
+create-documentation,housekeeping,write docs file,0.02,0.02,0.00

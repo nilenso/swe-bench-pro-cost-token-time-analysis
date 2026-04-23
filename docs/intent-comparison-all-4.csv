@@ -1,0 +1,32 @@
+intent,category,display_name,Sonnet 4.5,GPT-5,GPT-5.4,Opus 4.5/4.6,shown_in_analytics_sonnet_gpt5_html,shown_in_pi_analytics_opus_gpt54_html
+read-file-full,read,view file,5.53,11.57,20.32,10.25,yes,yes
+read-file-range,read,view lines (range),10.56,13.82,13.22,13.1,yes,yes
+read-via-bash,read,cat / head / tail,4.15,6.85,0.29,1.65,yes,yes
+read-file-full(truncated),read,view file (truncated),0.35,0.56,2.53,2.31,,yes
+search-keyword,search,grep / ripgrep,12.38,14.97,15.49,16.34,yes,yes
+search-files-by-content,search,find | grep,5.75,0.02,0.06,0.93,yes,
+view-directory,search,view directory,2.01,4.91,0,0,yes,
+search-files-by-name,search,find by filename,3.17,0.11,0.77,1.39,yes,
+list-directory,search,ls / tree,1.49,1.63,0.13,1.79,yes,yes
+inspect-file-metadata,search,wc / stat,0.44,0.05,1.73,0.07,,yes
+run-repro-script,reproduce,run repro script,0.66,2.46,0.1,0,yes,
+edit-source,edit,edit source,9.23,11.48,8.8,14.29,yes,yes
+insert-source,edit,insert into source,0.02,1.85,0,0,yes,
+run-test-suite,verify,pytest / go test (broad),10.51,1.35,0.06,1.32,yes,
+compile-build,verify,go build / make / tsc,1.92,0.09,2.24,7.01,yes,yes
+run-verify-script,verify,run verify script,6.05,0.26,0,0,yes,
+create-test-script,verify,write test file,4.66,0.04,0.32,0.26,yes,
+run-inline-verify,verify,inline verify snippet,1.77,1.6,3.14,0.4,yes,yes
+run-test-specific,verify,pytest -k / :: (targeted),1.95,0.85,1.28,0.73,yes,
+edit-test-or-repro,verify,edit test / repro,1.26,0.56,1.54,1.92,,yes
+git-github-context,git,GitHub context,0,0,10.4,7.08,,yes
+git-repo-inspect,git,repo inspect,0,0,5.95,4.1,,yes
+git-local-state-change,git,local state change,0,0,2.02,4.43,,yes
+git-publish,git,publish,0,0,0.96,2.38,,yes
+file-cleanup,housekeeping,rm / mv / cp,2.75,0.04,0.26,0.86,yes,
+search-keyword(failed),failed,grep/find (shell error),0.08,6.33,0.06,0.07,,
+bash-command(failed),failed,bash (shell error),0.06,2.8,0.29,0.26,,
+read-via-bash(failed),failed,cat/head/sed (shell error),0.04,2.29,0,0,,
+run-script(failed),failed,python/node (shell error),0.08,1.75,0.19,0,,
+empty,other,empty action (timeout),1.36,1.97,0,0,yes,
+bash-other,other,other shell command,1.64,1.45,1.15,1.32,yes,

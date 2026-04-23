@@ -164,6 +164,7 @@ def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | N
     first_edit = next((i for i, b in enumerate(base_intents) if b in ci.SOURCE_EDIT_INTENTS), -1)
     last_edit = next((i for i in range(n - 1, -1, -1) if base_intents[i] in ci.SOURCE_EDIT_INTENTS), -1)
     first_verify = next((i for i, b in enumerate(base_intents) if b in ci.SEQUENCE_VERIFY_INTENTS), -1)
+    last_verify = next((i for i in range(n - 1, -1, -1) if base_intents[i] in ci.SEQUENCE_VERIFY_INTENTS), -1)
     first_verify_pass = next((i for i in range(n) if verify_outcomes[i] == "pass"), -1)
     submit_idx = next((i for i, b in enumerate(base_intents) if b == "submit"), -1)
 
@@ -171,6 +172,7 @@ def classify_file(model: str, path: str, phase_bins: int = 20) -> FileResult | N
         "first_edit": pct(first_edit),
         "last_edit": pct(last_edit),
         "first_verify": pct(first_verify),
+        "last_verify": pct(last_verify),
         "first_verify_pass": pct(first_verify_pass),
         "submit": pct(submit_idx),
     }
