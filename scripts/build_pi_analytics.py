@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html as html_lib
 import json
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -400,6 +402,30 @@ def build_payload(
     return payload
 
 
+def _slugify_heading(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html_lib.unescape(text).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text or "section"
+
+
+def _add_h2_ids(html_text: str) -> str:
+    seen: dict[str, int] = {}
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        inner = match.group(2)
+        if "id=" in attrs:
+            return match.group(0)
+        slug = _slugify_heading(inner)
+        seen[slug] = seen.get(slug, 0) + 1
+        if seen[slug] > 1:
+            slug = f"{slug}-{seen[slug]}"
+        return f'<h2{attrs} id="{slug}">{inner}</h2>'
+
+    return re.sub(r"<h2([^>]*)>(.*?)</h2>", repl, html_text, flags=re.S)
+
+
 def render_html(payload: dict) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
     model_count = len(payload.get("models", []))
@@ -414,7 +440,7 @@ def render_html(payload: dict) -> str:
         "diff review, sync/integrate, local state change, and publish."
     )
 
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -1561,6 +1587,7 @@ function renderStackedPanels() {{
 </body>
 </html>
 """
+    return _add_h2_ids(html)
 
 
 def main() -> None:

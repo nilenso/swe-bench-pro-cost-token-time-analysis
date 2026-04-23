@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import statistics
 import sys
 from collections import Counter
@@ -2088,6 +2089,30 @@ def render_resolution_sections(results, models) -> list[tuple[str, str, str]]:
     return sections
 
 
+def _slugify_heading(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text or "section"
+
+
+def _add_h2_ids(html_text: str) -> str:
+    seen: dict[str, int] = {}
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        inner = match.group(2)
+        if "id=" in attrs:
+            return match.group(0)
+        slug = _slugify_heading(inner)
+        seen[slug] = seen.get(slug, 0) + 1
+        if seen[slug] > 1:
+            slug = f"{slug}-{seen[slug]}"
+        return f'<h2{attrs} id="{slug}">{inner}</h2>'
+
+    return re.sub(r"<h2([^>]*)>(.*?)</h2>", repl, html_text, flags=re.S)
+
+
 def render_html(results, failure_data=None) -> str:
     """Results is dict[str, list[FileResult]] from process_all."""
     models = sorted(results.keys())
@@ -2121,7 +2146,7 @@ def render_html(results, failure_data=None) -> str:
         for title, table, notes in sections
     )
 
-    return f"""<!doctype html>
+    html_out = f"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -2154,6 +2179,7 @@ def render_html(results, failure_data=None) -> str:
 {body}
 </body>
 </html>"""
+    return _add_h2_ids(html_out)
 
 
 def main():

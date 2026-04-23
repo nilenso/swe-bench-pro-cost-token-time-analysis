@@ -310,13 +310,13 @@
 
   <div class="legend" id="topLegend"></div>
 
-  <h2>1. High-Level Action Frequencies</h2>
+  <h2 id="1-high-level-action-frequencies">1. High-Level Action Frequencies</h2>
   <p class="chart-desc">Proportion of steps in each high-level category. Normalised so models are comparable despite different step counts.</p>
   <div class="chart-wrapper">
     <div id="highPaired"></div>
   </div>
 
-  <h2>2. Intent Comparison</h2>
+  <h2 id="2-intent-comparison">2. Intent Comparison</h2>
   <p class="chart-desc">Frequency per 100 steps, compared across the selected models.</p>
   <div class="filter-control">
     <label for="intentMaxVSlider">show rows where maxV &gt; <span class="filter-value" id="intentMaxVValue">1.5</span> per 100 steps</label>
@@ -327,14 +327,14 @@
     <div id="heatTable"></div>
   </div>
 
-  <h2>3. Steps per trajectory, by model</h2>
+  <h2 id="3-steps-per-trajectory-by-model">3. Steps per trajectory, by model</h2>
   <p class="chart-desc">Cumulative share of runs that finished within N steps. Dashed line marks the 250-step cap.</p>
   <p class="chart-desc" id="stepDistDesc"></p>
   <div class="chart-wrapper">
     <canvas id="stepDistChart" height="320"></canvas>
   </div>
 
-  <h2>4. Typical Trajectory Shape</h2>
+  <h2 id="4-typical-trajectory-shape">4. Typical Trajectory Shape</h2>
   <p class="chart-desc">Stacked area chart: how the mix of actions evolves from start to end of the average trajectory. Panels ordered by resolve rate (descending).</p>
   <div id="stackedPanels"></div>
 

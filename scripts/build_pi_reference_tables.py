@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -759,6 +760,30 @@ def _render_cleanup_decomposition_section(results: dict[str, list], models: list
     )
 
 
+def _slugify_heading(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text or "section"
+
+
+def _add_h2_ids(html_text: str) -> str:
+    seen: dict[str, int] = {}
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        inner = match.group(2)
+        if "id=" in attrs:
+            return match.group(0)
+        slug = _slugify_heading(inner)
+        seen[slug] = seen.get(slug, 0) + 1
+        if seen[slug] > 1:
+            slug = f"{slug}-{seen[slug]}"
+        return f'<h2{attrs} id="{slug}">{inner}</h2>'
+
+    return re.sub(r"<h2([^>]*)>(.*?)</h2>", repl, html_text, flags=re.S)
+
+
 def render_html(
     results: dict[str, list],
     raw_single_counts: dict[str, int],
@@ -977,7 +1002,7 @@ def render_html(
             '</div>'
         )
 
-    return f"""<!doctype html>
+    html_out = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -1066,6 +1091,7 @@ def render_html(
   </div>
 </body>
 </html>"""
+    return _add_h2_ids(html_out)
 
 
 def main() -> None:

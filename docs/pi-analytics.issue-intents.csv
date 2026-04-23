@@ -21,13 +21,13 @@ list-directory,search,ls / tree,3.02,0.13,1.90,0.48,3.02,1.41
 git-sync-integrate,git,sync / integrate,1.92,0.58,0.52,0.39,1.92,1.13
 read-via-bash,read,cat / head / tail,1.69,0.29,1.64,0.00,0.00,1.69
 run-custom-script,verify,run custom script,1.41,0.54,0.86,0.10,0.00,1.41
-read-config-file,read,view config file,0.82,0.67,0.35,0.00,0.82,0.00
 run-test-suite,verify,pytest / go test (broad),1.64,0.06,1.64,0.10,1.37,0.28
+read-config-file,read,view config file,0.82,0.67,0.35,0.00,0.82,0.00
 file-cleanup,housekeeping,rm / mv / cp,1.12,0.26,1.12,0.29,0.27,0.00
 create-test-script,verify,write test file,0.85,0.32,0.09,0.48,0.82,0.85
 run-inline-snippet,verify,python -c / node -e,0.51,0.51,0.09,0.19,0.27,0.00
-create-file-via-inline-script,edit,inline create-file snippet,0.58,0.58,0.00,0.10,0.00,0.00
 edit-source(failed),failed,edit source (failed),0.56,0.38,0.09,0.29,0.27,0.56
+create-file-via-inline-script,edit,inline create-file snippet,0.58,0.58,0.00,0.10,0.00,0.00
 fetch-url,other,curl / http,1.30,0.00,1.30,0.00,0.00,0.56
 read-file-failed,failed,read (failed),0.55,0.32,0.09,0.29,0.55,0.00
 search-files-by-content,search,find | grep,1.21,0.06,1.21,0.00,0.00,0.00
@@ -35,10 +35,10 @@ bash-command(failed),failed,bash (shell error),0.35,0.29,0.35,0.10,0.00,0.00
 tmux-session,housekeeping,tmux,0.35,0.35,0.09,0.00,0.00,0.00
 edit-test-or-repro(failed),failed,edit test/repro (failed),0.26,0.26,0.09,0.10,0.00,0.00
 read-via-inline-script,read,inline read snippet,0.26,0.26,0.00,0.00,0.00,0.00
-run-script(failed),failed,python/node (shell error),0.19,0.19,0.00,0.00,0.00,0.00
 web-search,search,web search,0.27,0.16,0.00,0.00,0.27,0.00
-search-keyword(failed),failed,grep/find (shell error),0.28,0.06,0.00,0.19,0.00,0.28
+run-script(failed),failed,python/node (shell error),0.19,0.19,0.00,0.00,0.00,0.00
 install-deps,housekeeping,pip install / npm install,0.28,0.00,0.26,0.00,0.27,0.28
+search-keyword(failed),failed,grep/find (shell error),0.28,0.06,0.00,0.19,0.00,0.28
 create-repro-script,reproduce,write repro script,0.13,0.13,0.00,0.00,0.00,0.00
 run-repro-script,reproduce,run repro script,0.10,0.10,0.00,0.00,0.00,0.00
 start-service,housekeeping,"start service (redis, etc.)",0.09,0.06,0.09,0.00,0.00,0.00
