@@ -16,29 +16,29 @@ The published HTML artifacts live in `docs/`.
 ### Trajectory shapes / intent analysis
 
 #### SWE-Bench Pro
-- [Analytics — all 4 models](docs/analytics.html)
-- [Analytics — Sonnet 4.5 vs GPT-5](docs/analytics-sonnet-gpt5.html)
-- [Reference tables — all 4 models](docs/reference.html)
-- [Reference tables — Sonnet 4.5 vs GPT-5](docs/reference-sonnet-gpt5.html)
+- [Analytics — all 4 models](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/analytics.html)
+- [Analytics — Sonnet 4.5 vs GPT-5](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/analytics-sonnet-gpt5.html)
+- [Reference tables — all 4 models](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/reference.html)
+- [Reference tables — Sonnet 4.5 vs GPT-5](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/reference-sonnet-gpt5.html)
 
 #### Pi transcripts
-- [Analytics — all available Pi models](docs/pi-analytics.html)
-- [Analytics — Opus 4.5/4.6 vs GPT-5.4](docs/pi-analytics-opus-gpt54.html)
-- [Reference tables — all available Pi models](docs/pi-references.html)
-- [Reference tables — Opus 4.5/4.6 vs GPT-5.4](docs/pi-references-opus-gpt54.html)
+- [Analytics — all available Pi models](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/pi-analytics.html)
+- [Analytics — Opus 4.5/4.6 vs GPT-5.4](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/pi-analytics-opus-gpt54.html)
+- [Reference tables — all available Pi models](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/pi-references.html)
+- [Reference tables — Opus 4.5/4.6 vs GPT-5.4](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/pi-references-opus-gpt54.html)
 
 #### Shared appendix / viewers
-- [Trajectory sequence viewer](docs/trajectory-sequences.html)
-- [Intent taxonomy tree](docs/intent-taxonomy.html)
+- [Trajectory sequence viewer](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/trajectory-sequences.html)
+- [Intent taxonomy tree](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/intent-taxonomy.html)
 - [Intent classification rules (SWE-Agent)](docs/intent-classification-rules.md)
 - [Intent classification rules (Pi)](docs/pi-intent-classification-rules.md)
 
 ### Cost / token / time analysis
-- [Main interactive report](docs/index.html)
-- [Parity scatter variant](docs/parity.html)
-- [White ratio charts](docs/ratio-charts-white.html)
-- [Unsubmitted-task report](docs/unsubmitted.html)
-- [Text summary](docs/report.txt)
+- [Main interactive report](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/)
+- [Parity scatter variant](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/parity.html)
+- [White ratio charts](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/ratio-charts-white.html)
+- [Unsubmitted-task report](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/unsubmitted.html)
+- [Text summary](https://nilenso.github.io/swe-bench-pro-cost-token-time-analysis/report.txt)
 
 ---
 
