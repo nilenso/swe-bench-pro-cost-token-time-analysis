@@ -1,11 +1,13 @@
 # Coding-agent trajectory analysis
 
-This repo backs two related blog-post threads:
+This repo contains analysis of **SWE-Bench Pro trajectories** and **other coding-agent trajectories** as well, including Pi transcripts.
+
+The main analysis families here are:
 
 1. **SWE-Bench Pro operating-profile analysis** — cost, tokens, tool time, and paired task comparisons.
 2. **Trajectory-shape analysis** — workflow patterns, intent frequencies, and reference tables across both SWE-Bench Pro and Pi transcripts.
 
-If you landed here from a blog post, start with the published HTMLs in `docs/`. Those are the canonical reader-facing artifacts.
+The published HTML artifacts live in `docs/`.
 
 ---
 
@@ -243,5 +245,3 @@ For details, see [`RESEARCH_NOTES.md`](RESEARCH_NOTES.md).
 
 - Blog post: **Checking my model vibes against SWE-Bench Pro**
 - Blog post: **Trajectory shapes**
-
-This repo is the technical appendix and source-material base for both.
